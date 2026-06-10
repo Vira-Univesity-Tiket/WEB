@@ -1,0 +1,6 @@
+{
+  "apiBasePath": "/api",
+  "apiBaseUrl": "",
+  "retryCount": 1,
+  "debug": false
+}

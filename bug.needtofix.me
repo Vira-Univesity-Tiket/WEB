@@ -1,0 +1,104 @@
+مشکلات مهم
+
+
+شارژ کیف پول بدون پرداخت واقعی انجام می‌شود. مسیر POST /wallet/topup مستقیم موجودی را زیاد و تراکنش deposit ثبت می‌کند، بدون درگاه، callback، verification یا idempotency. این فعلاً پول رایگان است.
+
+walletController.js (line 46)
+
+
+
+credential و secret پیش‌فرض خطرناک در کد وجود دارد: ادمین Mohd / 177840 و secret پیش‌فرض JWT/session. در محیط production اگر env درست تنظیم نشود، کل سیستم قابل حدس می‌شود.
+
+authController.js (line 150)
+
+security.js (line 11)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+توکن احراز هویت از query و body هم پذیرفته می‌شود. این باعث leak شدن توکن در لاگ‌ها، history، proxy و analytics می‌شود. بهتر است فقط Authorization: Bearer پذیرفته شود.
+
+security.js (line 58)
+
+
+
+dev server به صورت پیش‌فرض API را به دامنه production می‌زند. یک توسعه‌دهنده با npm run dev ممکن است ناخواسته روی داده واقعی کار کند.
+
+vite.config.ts (line 11)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+URL production API داخل فرانت hardcode شده است. اگر env تنظیم نشود، buildها به https://wa.bog.co.ir/api وصل می‌شوند و portability/امنیت deploy پایین می‌آید.
+
+apiService.ts (line 11)
+
+
+
+سرور قبل/همزمان با init دیتابیس بالا می‌آید و خطای initDB فقط log می‌شود، process fail نمی‌کند. نتیجه: سرویس ظاهراً online است ولی endpointها ممکن است خراب باشند.
+
+server.js (line 59)
+
+db.js (line 435)
+
+
+
+schema راننده‌های seed شده با رمز ساده 123456 دارد. حتی اگر بعداً rehash شود، نصب تازه سیستم credential عمومی و قابل حدس می‌سازد.
+
+db_schema.sql (line 289)
+
+
+
+توکن‌های کاربر/راننده در localStorage ذخیره می‌شوند و پروفایل شامل nationalCode هم persist می‌شود. در صورت XSS، نشست و داده حساس کاربر لو می‌رود.
+
+apiService.ts (line 17)
+
+useSnappLogic.ts (line 191)
+
+
+
+آپلود فایل پشتیبانی فقط به MIME داخل data URL اعتماد می‌کند، نه magic bytes/اسکن محتوا. همچنین فایل قبل از commit دیتابیس نوشته می‌شود و rollback می‌تواند فایل orphan بسازد.
+
+supportTicketController.js (line 56)
+
+supportTicketController.js (line 210)
+
+
+
+آپدیت پروفایل اجازه ذخیره avatar تا حدود ۶MB را می‌دهد. این برای DB و localStorage سنگین است و می‌تواند باعث کندی/پر شدن storage شود.
+
+authController.js (line 123)
+
+
+
+endpoint سلامت عمومی HTML، لیست APIها و NODE_ENV را نمایش می‌دهد. برای production بهتر است health عمومی حداقلی باشد و جزئیات پشت auth بماند.
+
+healthController.js (line 50)
+
+
+
+تست خودکار تقریباً وجود ندارد: نه script تست در فرانت، نه تست بک‌اند/API، نه migration test. با توجه به منطق مالی/رزرو/اسکن، این ریسک regression بالاست.
+
+package.json (line 7)
+
+backend/package.json (line 6)
+
+
+
+README با وضعیت واقعی پروژه نمی‌خواند؛ فقط اجرای AI Studio/Gemini را توضیح داده، اما بک‌اند، MySQL، envهای لازم، migration و اجرای دو سرویس را مستند نکرده است.
+
+README.md (line 1)
+
+
+
+فایل‌های build شده dist/ و حتی داده storage داخل پروژه هستند. اگر این پروژه قرار است repo شود، خروجی build و داده‌های runtime بهتر است ignore شوند. الان هم repo git نیست، پس کنترل تغییرات و history ندارید.
+
+
+
+
+
+
+
+fe_oa_64893f755c389f13eca37574ca02aac3c636dd225ca021b2(use)
+
+
+fe_oa_525a2edf60a8b792b7991e9990225bb4e9cbabababc8bb30

@@ -1,0 +1,13 @@
+عنوان: mohd1782@MOHDs-Mac backend % npm run dev  > university-shuttle-backend@1.0.0 dev
+شناسه تیکت: 2
+کاربر: سلام خوبی (120367741)
+وضعیت: open
+تاریخ ایجاد: ۱۴۰۵/۲/۳۰, ۲۰:۰۷:۰۴
+تاریخ بسته شدن: -
+
+--- پیام‌ها ---
+[۱۴۰۵/۲/۳۰, ۲۰:۰۷:۰۴] کاربر(120367741)
+mohd1782@MOHDs-Mac backend % npm run dev> university-shuttle-backend@1.0.0 dev> node server.js[dotenv@17.2.4] injecting env (0) from .env.development.local -- tip: ✅ audit secrets and track compliance: https://dotenvx.com/ops[dotenv@17.2.4] injecting env (0) from .env.local -- tip: ⚙️  suppress all logs with { quiet: true }[dotenv@17.2.4] injecting env (0) from .env.development -- tip: ✅ audit secrets and track compliance: https://dotenvx.com/ops[dotenv@17.2.4] injecting env (13) from .env -- tip: 👥 sync secrets across teammates & machines: https://dotenvx.com/ops[VIRA_CONFIG][backend] env=development port=5005 apiBasePath=/api origins=5Starting server on port 5005...[ENV WARNING] PAYMENT_RETURN_URL is not set. Payment callback redirect may fail.❌ Database Initialization Error: getaddrinfo ENOTFOUND vira   -> Check your DB_HOST in backend/.env🚀 Backend server running on port 5005
+
+--- تاریخچه وضعیت‌ها ---
+[۱۴۰۵/۲/۳۰, ۲۰:۰۷:۰۴] - -> open توسط user(120367741)

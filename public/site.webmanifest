@@ -1,0 +1,33 @@
+{
+  "name": "سامانه هوشمند حمل و نقل دانشگاهی ویرا",
+  "short_name": "ویرا",
+  "description": "University Shuttle",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#3674B5",
+  "theme_color": "#3674B5",
+  "icons": [
+    {
+      "src": "/logo/user.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo/user.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo/user.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/logo/user.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

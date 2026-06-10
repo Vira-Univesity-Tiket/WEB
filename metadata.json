@@ -1,0 +1,8 @@
+{
+  "name": "Vira - University Shuttle",
+  "description": "A student-centric super app for university transportation booking and campus services powered by AI.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}
