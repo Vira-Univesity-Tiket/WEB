@@ -1,7 +1,9 @@
+import { logError } from '../logging.js';
 
 import { db } from '../db.js';
 import { auditLog, issueAuthToken, verifyPassword } from '../security.js';
 import { rejectUnexpectedFields, sanitizeText, validateNationalCode, validatePersianFullName, validateStudentId } from '../validation.js';
+import { parseUpload } from '../services/uploadValidation.js';
 
 const formatBalance = (balance) => {
   const amountRial = Number(balance || 0);
@@ -16,9 +18,15 @@ const mapUser = (user) => ({
   province: user.province ?? '',
   city: user.city ?? '',
   balance: formatBalance(user.balance),
-  language: user.language ?? 'fa',
+  language: ['fa', 'ar', 'en'].includes(user.language) ? user.language : 'fa',
   avatar: user.avatar ?? ''
 });
+
+export const handleCurrentUser = async (req, res) => {
+  const [rows] = await db.query('SELECT * FROM users WHERE id = ? AND student_id = ? LIMIT 1', [req.auth.sub, req.auth.studentId]);
+  if (!rows.length || rows[0].status === 'suspended') return res.status(401).json({ error: 'Authentication required' });
+  res.json(mapUser(rows[0]));
+};
 
 export const handleLogin = async (req, res) => {
   const studentValidation = validateStudentId(req.body.student_id);
@@ -52,7 +60,7 @@ export const handleLogin = async (req, res) => {
 
     res.json({ ...mapUser(rows[0]), authToken: token, token });
   } catch (error) {
-    console.error("-> Login Error:", error);
+    logError("-> Login Error:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -87,7 +95,6 @@ export const handleRegister = async (req, res) => {
       return res.status(500).json({ error: "User created but not found" });
     }
 
-    console.log("-> New User Created:", rows[0].name);
     const token = issueAuthToken({
       sub: rows[0].id.toString(),
       role: 'user',
@@ -98,10 +105,9 @@ export const handleRegister = async (req, res) => {
     res.json({ ...mapUser(rows[0]), authToken: token, token });
   } catch (error) {
     if (error?.code === 'ER_DUP_ENTRY') {
-      console.log("-> Duplicate user:", studentValidation.value);
       return res.status(409).json({ error: "Student ID or National Code already exists" });
     }
-    console.error("-> Register Error:", error);
+    logError("-> Register Error:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -118,9 +124,16 @@ export const handleUpdateProfile = async (req, res) => {
   const updates = [];
   const values = [];
 
+  if (language !== undefined && !['fa', 'ar', 'en'].includes(language)) return res.status(400).json({ error: 'زبان انتخاب‌شده معتبر نیست.' });
+
   if (province !== undefined) { updates.push('province = ?'); values.push(sanitizeText(province, 50)); }
   if (city !== undefined) { updates.push('city = ?'); values.push(sanitizeText(city, 50)); }
-  if (avatar !== undefined) { updates.push('avatar = ?'); values.push(String(avatar).slice(0, 6_000_000)); }
+  if (avatar !== undefined) {
+    if (avatar !== '' && !parseUpload(avatar, { maxBytes: 512 * 1024, allowedMime: ['image/png', 'image/jpeg', 'image/webp'] }).ok) {
+      return res.status(400).json({ error: 'تصویر پروفایل باید PNG، JPEG یا WebP و حداکثر ۵۱۲ کیلوبایت باشد.' });
+    }
+    updates.push('avatar = ?'); values.push(avatar);
+  }
   if (language !== undefined) { updates.push('language = ?'); values.push(language); }
 
   if (updates.length === 0) return res.status(400).json({ error: "No fields to update" });
@@ -140,7 +153,7 @@ export const handleUpdateProfile = async (req, res) => {
     await auditLog(db, req, 'user.update_profile', 'user', req.auth?.sub, { studentId: student_id });
     res.json({ success: true, message: "Profile updated successfully" });
   } catch (error) {
-    console.error("-> Update Profile Error:", error);
+    logError("-> Update Profile Error:", error);
     res.status(500).json({ error: "Could not update user" });
   }
 };
@@ -183,7 +196,7 @@ export const handleAdminLogin = async (req, res) => {
       return res.json({ success: true, role: account.role, username: account.username, authToken: token, token });
     }
   } catch (error) {
-    console.error('Admin account login check failed:', error);
+    logError('Admin account login check failed:', error);
   }
   req.auth = { role: 'admin', sub: String(username || '') };
   await auditLog(db, req, 'admin.login_failed', 'admin_account', username || null, { username: String(username || '') });

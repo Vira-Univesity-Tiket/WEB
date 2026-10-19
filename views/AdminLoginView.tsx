@@ -25,7 +25,7 @@ const AdminLoginView: React.FC<AdminLoginViewProps> = ({ onLogin }) => {
 
       <div className="relative z-10 min-h-screen flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-5xl grid lg:grid-cols-[1.1fr_0.9fr] overflow-hidden rounded-[32px] border border-white/70 bg-white/75 shadow-[0_30px_100px_rgba(15,23,42,0.12)] backdrop-blur-xl">
-          <div className="hidden lg:flex flex-col justify-between p-10 text-white bg-[linear-gradient(160deg,_#0f766e_0%,_#0ea5e9_55%,_#2563eb_100%)]">
+          <div className="hidden lg:flex flex-col justify-between p-10 text-white bg-[linear-gradient(160deg,_#0f766e_0%,_#0369a1_55%,_#2563eb_100%)]">
             <div className="space-y-6">
               <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-bold backdrop-blur">
                 <Icons.Shield size={16} />
@@ -67,7 +67,7 @@ const AdminLoginView: React.FC<AdminLoginViewProps> = ({ onLogin }) => {
                  <div className="space-y-1.5">
                      <label className="text-xs font-black text-gray-500 mr-1">نام کاربری مدیر</label>
                      <div className="relative group">
-                       <div className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 group-focus-within:bg-vira-light group-focus-within:text-vira-primary transition-colors">
+                       <div className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-600 dark:text-gray-400 group-focus-within:bg-vira-light group-focus-within:text-vira-primary transition-colors">
                          <Icons.User size={18} />
                        </div>
                        <input 
@@ -84,7 +84,7 @@ const AdminLoginView: React.FC<AdminLoginViewProps> = ({ onLogin }) => {
                  <div className="space-y-1.5">
                      <label className="text-xs font-black text-gray-500 mr-1">رمز عبور</label>
                      <div className="relative group">
-                       <div className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 group-focus-within:bg-vira-light group-focus-within:text-vira-primary transition-colors">
+                       <div className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-600 dark:text-gray-400 group-focus-within:bg-vira-light group-focus-within:text-vira-primary transition-colors">
                          <Icons.Lock size={18} />
                        </div>
                        <input 
@@ -107,7 +107,7 @@ const AdminLoginView: React.FC<AdminLoginViewProps> = ({ onLogin }) => {
               </form>
 
               <div className="mt-8 pt-5 border-t border-gray-100 text-center">
-                  <span className="text-xs text-gray-400 font-mono" dir="ltr">System v4.2.0 • Secured by Vira Enterprise</span>
+                  <span className="text-xs text-gray-600 dark:text-gray-400 font-mono" dir="ltr">System v4.2.0 • Secured by Vira Enterprise</span>
               </div>
             </div>
           </div>

@@ -9,7 +9,7 @@ import { translations } from '../data/translations';
 interface ProfileViewProps {
   userProfile: UserProfile;
   onBack: () => void;
-  onSave: (province: string, city: string, avatar: string, language: Language) => void;
+  onSave: (province: string, city: string, avatar: string, language: Language) => Promise<void>;
   onLogout: () => void;
   isDarkMode: boolean;
   onToggleTheme: () => void;
@@ -109,12 +109,11 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
     fileInputRef.current?.click();
   };
 
-  const handleSave = () => {
-    onSave(provinceName, cityName, avatar, language);
-    showToast(
-      language === 'en' ? 'Changes saved successfully.' : (language === 'ar' ? 'تم حفظ التغييرات بنجاح.' : 'تغییرات با موفقیت ذخیره شد.'),
-      'success'
-    );
+  const [saving, setSaving] = useState(false);
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    try { await onSave(provinceName, cityName, avatar, language); } finally { setSaving(false); }
   };
 
   return (
@@ -130,7 +129,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
 
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 p-4 flex items-center gap-3 shadow-sm sticky top-0 z-10 border-b dark:border-slate-800">
-        <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
+        <button aria-label="بازگشت به خانه" onClick={onBack} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
            {language === 'en' ? <Icons.ArrowRight className="rotate-180 text-gray-700 dark:text-gray-200" size={24} /> : <Icons.ArrowRight size={24} className="text-gray-700 dark:text-gray-200" />}
         </button>
         <h2 className="text-lg font-bold text-gray-800 dark:text-white">{t.profile_header}</h2>
@@ -141,7 +140,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
         {/* Avatar Section */}
         <div className="flex flex-col items-center mb-8 mt-4">
            <div 
-             onClick={triggerFileInput}
+             role="button" tabIndex={0} aria-label="تغییر تصویر پروفایل" onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); triggerFileInput(); } }} onClick={triggerFileInput}
              className="w-28 h-28 bg-gray-200 dark:bg-slate-800 rounded-full border-4 border-white dark:border-slate-800 shadow-lg flex items-center justify-center relative transition-colors cursor-pointer group overflow-hidden"
            >
                {avatar ? (
@@ -176,8 +175,8 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
                 </div>
             </div>
             <button 
-                onClick={onToggleTheme}
-                className={`w-12 h-7 rounded-full p-1 transition-colors duration-300 relative ${isDarkMode ? 'bg-indigo-500' : 'bg-gray-300'}`}
+                aria-label="حالت تاریک" role="switch" aria-checked={isDarkMode} onClick={onToggleTheme}
+                className={`w-12 h-7 rounded-full p-1 flex items-center transition-colors duration-300 relative ${isDarkMode ? 'bg-indigo-500' : 'bg-gray-300'}`}
             >
                 <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 ${isDarkMode ? (language === 'en' ? 'translate-x-5' : '-translate-x-5') : 'translate-x-0'}`}></div>
             </button>
@@ -185,26 +184,26 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
 
         {/* Read-Only Fields */}
         <div className="space-y-4 mb-6">
-           <div className="flex flex-col gap-1.5 opacity-80">
+           <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mx-1">{t.name}</label>
               <div className="bg-gray-200/60 dark:bg-slate-800/60 p-3.5 rounded-xl border border-gray-200 dark:border-slate-800 flex items-center gap-3">
-                 <Icons.User size={18} className="text-gray-400" />
+                 <Icons.User size={18} className="text-gray-600 dark:text-gray-400" />
                  <span className="text-sm font-bold text-gray-600 dark:text-gray-300">{userProfile.name}</span>
               </div>
            </div>
 
-           <div className="flex flex-col gap-1.5 opacity-80">
+           <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mx-1">{t.studentId}</label>
               <div className="bg-gray-200/60 dark:bg-slate-800/60 p-3.5 rounded-xl border border-gray-200 dark:border-slate-800 flex items-center gap-3">
-                 <Icons.Book size={18} className="text-gray-400" />
+                 <Icons.Book size={18} className="text-gray-600 dark:text-gray-400" />
                  <span className="text-sm font-bold text-gray-600 dark:text-gray-300 tracking-wider font-mono pt-1">{userProfile.studentId}</span>
               </div>
            </div>
 
-           <div className="flex flex-col gap-1.5 opacity-80">
+           <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mx-1">{t.nationalCode}</label>
               <div className="bg-gray-200/60 dark:bg-slate-800/60 p-3.5 rounded-xl border border-gray-200 dark:border-slate-800 flex items-center gap-3">
-                 <Icons.QrCode size={18} className="text-gray-400" />
+                 <Icons.QrCode size={18} className="text-gray-600 dark:text-gray-400" />
                  <span className="text-sm font-bold text-gray-600 dark:text-gray-300 tracking-wider font-mono pt-1">{userProfile.nationalCode}</span>
               </div>
            </div>
@@ -221,7 +220,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
               <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mx-1">{t.province}</label>
               <div className="relative">
                 <select
-                  value={selectedProvinceId}
+                  aria-label={t.province} value={selectedProvinceId}
                   onChange={handleProvinceChange}
                   className="w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-3.5 rounded-xl text-sm font-bold text-gray-700 dark:text-white outline-none focus:border-vira-primary appearance-none transition-colors"
                 >
@@ -230,7 +229,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
-                <Icons.ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                <Icons.ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 pointer-events-none" size={16} />
               </div>
             </div>
 
@@ -239,7 +238,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
               <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mx-1">{t.city}</label>
               <div className="relative">
                 <select
-                  value={cityName}
+                  aria-label={t.city} value={cityName}
                   onChange={(e) => setCityName(e.target.value)}
                   disabled={!selectedProvinceId}
                   className="w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-3.5 rounded-xl text-sm font-bold text-gray-700 dark:text-white outline-none focus:border-vira-primary appearance-none disabled:bg-gray-100 dark:disabled:bg-slate-800 disabled:text-gray-400 transition-colors"
@@ -249,7 +248,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
                     <option key={c.id} value={c.name}>{c.name}</option>
                   ))}
                 </select>
-                <Icons.ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                <Icons.ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 pointer-events-none" size={16} />
               </div>
             </div>
         </div>
@@ -258,7 +257,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
         <h3 className="font-bold text-gray-800 dark:text-white mb-4 mt-6">{t.language}</h3>
         <div className="relative mb-6">
             <select
-                value={language}
+                aria-label={t.language} value={language}
                 onChange={(e) => setLanguage(e.target.value as Language)}
                 className="w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-3.5 rounded-xl text-sm font-bold text-gray-700 dark:text-white outline-none focus:border-vira-primary appearance-none transition-colors"
             >
@@ -266,13 +265,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
                 <option value="en">English</option>
                 <option value="ar">العربية</option>
             </select>
-            <Icons.ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+            <Icons.ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 pointer-events-none" size={16} />
         </div>
 
         {/* LOGOUT BUTTON - Added here as requested */}
         <button 
            onClick={onLogout}
-           className="w-full bg-red-50 dark:bg-red-900/10 text-red-500 border border-red-100 dark:border-red-900/30 py-4 rounded-xl font-bold active:scale-95 transition-all mb-8 flex items-center justify-center gap-2"
+           className="w-full bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-900/30 py-4 rounded-xl font-bold active:scale-95 transition-all mb-8 flex items-center justify-center gap-2"
         >
            <Icons.ArrowRight className="rotate-0" size={18} />
            {t.logout}
@@ -280,7 +279,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
 
         {/* Save Button */}
         <button 
-           onClick={handleSave}
+           disabled={saving} aria-busy={saving} onClick={handleSave}
            className="w-full bg-vira-primary text-white py-4 rounded-xl font-bold shadow-lg shadow-vira-accent/50 dark:shadow-none active:scale-95 transition-all mb-4 sticky bottom-4 z-10"
         >
            {t.save}

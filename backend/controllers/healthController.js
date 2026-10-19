@@ -1,3 +1,4 @@
+import { logError } from '../logging.js';
 
 import { probeDb } from '../db.js';
 
@@ -29,6 +30,12 @@ const endpoints = [
 ];
 
 export const handleHealth = async (_req, res) => {
+  const production = String(process.env.BACKEND_NODE_ENV || process.env.NODE_ENV) === 'production';
+  if (production || process.env.HEALTH_HTML_ENABLED !== 'true') {
+    const result = await probeDb();
+    return res.status(result.ok ? 200 : 503).json({ ok: result.ok, service: 'vira-backend' });
+  }
+
   if ((_req.path === '/healthz' || _req.originalUrl?.endsWith('/healthz')) && String(process.env.HEALTH_HTML_ENABLED || 'true').toLowerCase() !== 'true') {
     return res.json({
       ok: true,
@@ -36,7 +43,7 @@ export const handleHealth = async (_req, res) => {
       time: new Date().toISOString()
     });
   }
-  let dbStatus = 'Offline';
+  let dbStatus;
   let dbClass = 'status-offline';
   let dbIcon = '❌';
   let serviceStatus = 'Online';
@@ -52,7 +59,7 @@ export const handleHealth = async (_req, res) => {
     dbClass = 'status-online';
     dbIcon = '✅';
   } catch (error) {
-    console.error('DB Health Check Failed:', error);
+    logError('DB Health Check Failed:', error);
     dbStatus = 'Error';
     serviceStatus = 'Degraded';
     serviceClass = 'status-warning';

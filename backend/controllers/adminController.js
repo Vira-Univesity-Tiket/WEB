@@ -1,3 +1,4 @@
+import { logError } from '../logging.js';
 
 import { db } from '../db.js';
 import { auditLog } from '../security.js';
@@ -25,7 +26,7 @@ export const handleGetUsers = async (req, res) => {
     );
     res.json(rows.map(mapAdminUser));
   } catch (error) {
-    console.error('-> Get Users Error:', error);
+    logError('-> Get Users Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -50,6 +51,7 @@ export const handleTopUpUser = async (req, res) => {
 
   const connection = await db.getConnection();
   try {
+    await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
     await connection.beginTransaction();
 
     const [users] = await connection.query(
@@ -75,7 +77,7 @@ export const handleTopUpUser = async (req, res) => {
     );
 
     await connection.commit();
-    await auditLog(db, req, 'admin.user_topup', 'user', user.id, { amount: numericAmount, trackingNumber });
+    await auditLog(connection, req, 'admin.user_topup', 'user', user.id, { amount: numericAmount, trackingNumber });
 
     const [updated] = await connection.query(
       'SELECT balance FROM users WHERE id = ? LIMIT 1',
@@ -90,7 +92,7 @@ export const handleTopUpUser = async (req, res) => {
     });
   } catch (error) {
     await connection.rollback();
-    console.error('-> Top Up Error:', error);
+    logError('-> Top Up Error:', error);
     res.status(500).json({ error: 'Server error' });
   } finally {
     connection.release();
@@ -106,7 +108,7 @@ export const handleUpdateUser = async (req, res) => {
   const studentValidation = validateStudentId(req.body.studentId);
   const nationalValidation = validateNationalCode(req.body.nationalCode);
 
-  if (!Number.isFinite(userId)) return res.status(400).json({ error: 'Invalid user ID' });
+  if ((!Number.isSafeInteger(userId) || userId <= 0)) return res.status(400).json({ error: 'Invalid user ID' });
   if (!req.body.name || !req.body.studentId || !req.body.nationalCode) return res.status(400).json({ error: 'Fields required' });
   if (!nameValidation.ok) return res.status(400).json({ error: nameValidation.error });
   if (!studentValidation.ok) return res.status(400).json({ error: studentValidation.error });
@@ -120,7 +122,7 @@ export const handleUpdateUser = async (req, res) => {
     await auditLog(db, req, 'admin.user_update', 'user', userId);
     res.json({ success: true });
   } catch (error) {
-    console.error('Update User Failed', error);
+    logError('Update User Failed', error);
     if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Student ID or National Code already exists' });
     res.status(500).json({ error: 'Server error' });
   }
@@ -128,21 +130,30 @@ export const handleUpdateUser = async (req, res) => {
 
 export const handleDeleteUser = async (req, res) => {
   const userId = Number(req.params.userId);
-  if (!Number.isFinite(userId)) return res.status(400).json({ error: 'Invalid user ID' });
+  if ((!Number.isSafeInteger(userId) || userId <= 0)) return res.status(400).json({ error: 'Invalid user ID' });
 
+  const connection = await db.getConnection();
   try {
-    await db.query('DELETE FROM users WHERE id=?', [userId]);
-    await auditLog(db, req, 'admin.user_delete', 'user', userId);
+    await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+    await connection.beginTransaction();
+    const [users] = await connection.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [userId]);
+    if (!users.length) { await connection.rollback(); return res.status(404).json({ error: 'User not found' }); }
+    const [[history]] = await connection.query('SELECT (EXISTS(SELECT 1 FROM tickets WHERE user_id = ?) OR EXISTS(SELECT 1 FROM transactions WHERE user_id = ?) OR EXISTS(SELECT 1 FROM payment_transactions WHERE user_id = ?)) AS protected_history', [userId, userId, userId]);
+    if (history.protected_history) { await connection.rollback(); return res.status(409).json({ error: 'این کاربر سابقه مالی یا بلیط دارد؛ برای حفظ سوابق، حساب را غیرفعال کنید.' }); }
+    await connection.query('DELETE FROM users WHERE id=?', [userId]);
+    await connection.commit();
+    await auditLog(connection, req, 'admin.user_delete', 'user', userId);
     res.json({ success: true });
   } catch (error) {
-    console.error('Delete User Failed', error);
+    await connection.rollback();
+    logError('Delete User Failed', error);
     res.status(500).json({ error: 'Server error' });
-  }
+  } finally { connection.release(); }
 };
 
 export const handleToggleUserStatus = async (req, res) => {
   const userId = Number(req.params.userId);
-  if (!Number.isFinite(userId)) return res.status(400).json({ error: 'Invalid user ID' });
+  if ((!Number.isSafeInteger(userId) || userId <= 0)) return res.status(400).json({ error: 'Invalid user ID' });
 
   try {
     // Toggle active <-> suspended
@@ -155,7 +166,7 @@ export const handleToggleUserStatus = async (req, res) => {
     await auditLog(db, req, 'admin.user_toggle_status', 'user', userId, { newStatus: rows[0]?.status });
     res.json({ success: true, newStatus: rows[0]?.status });
   } catch (error) {
-    console.error('Toggle User Status Failed', error);
+    logError('Toggle User Status Failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };

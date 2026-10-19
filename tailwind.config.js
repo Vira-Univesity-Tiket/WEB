@@ -16,7 +16,7 @@ export default {
     extend: {
       colors: {
         'vira-primary': '#3674B5',
-        'vira-secondary': '#578FCA',
+        'vira-secondary': '#2b5e96',
         'vira-accent': '#A1E3F9',
         'vira-light': '#D1F8EF',
         'vira-dark': '#1e3a8a' // Darker blue for contrast

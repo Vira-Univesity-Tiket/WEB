@@ -1,3 +1,4 @@
+import { logError } from '../logging.js';
 import { db } from '../db.js';
 import { auditLog } from '../security.js';
 import {
@@ -72,7 +73,7 @@ export const handleCreateIdea = async (req, res) => {
   if (!descriptionValidation.ok) return res.status(400).json({ error: descriptionValidation.error });
 
   const userId = Number(req.auth?.sub);
-  if (!Number.isFinite(userId)) return res.status(400).json({ error: 'INVALID_USER_ID' });
+  if ((!Number.isSafeInteger(userId) || userId <= 0)) return res.status(400).json({ error: 'INVALID_USER_ID' });
 
   const conn = await db.getConnection();
   try {
@@ -86,12 +87,12 @@ export const handleCreateIdea = async (req, res) => {
     await insertStatusHistory(conn, { ideaId, fromStatus: null, toStatus: 'submitted', actorRole: 'user', actorId: userId });
     await conn.commit();
 
-    await auditLog(db, req, 'idea.create', 'user_idea', ideaId, { title: titleValidation.value });
-    const [rows] = await db.query('SELECT * FROM user_ideas WHERE id = ? LIMIT 1', [ideaId]);
+    await auditLog(conn, req, 'idea.create', 'user_idea', ideaId, { title: titleValidation.value });
+    const [rows] = await conn.query('SELECT * FROM user_ideas WHERE id = ? LIMIT 1', [ideaId]);
     return res.status(201).json(mapIdea(rows[0]));
   } catch (error) {
     await conn.rollback();
-    console.error('Create Idea Error:', error);
+    logError('Create Idea Error:', error);
     return res.status(500).json({ error: 'Server error' });
   } finally {
     conn.release();
@@ -100,7 +101,7 @@ export const handleCreateIdea = async (req, res) => {
 
 export const handleListMyIdeas = async (req, res) => {
   const userId = Number(req.auth?.sub);
-  if (!Number.isFinite(userId)) return res.status(400).json({ error: 'INVALID_USER_ID' });
+  if ((!Number.isSafeInteger(userId) || userId <= 0)) return res.status(400).json({ error: 'INVALID_USER_ID' });
 
   const pageValidation = parsePositiveInt(req.query.page, { min: 1, max: 1_000_000, error: 'INVALID_NUMBER' });
   const pageSizeValidation = parsePositiveInt(req.query.pageSize, { min: 1, max: 50, error: 'INVALID_NUMBER' });
@@ -122,14 +123,14 @@ export const handleListMyIdeas = async (req, res) => {
     );
     res.json({ items: rows.map(mapIdea), page, pageSize, total: Number(countRows?.[0]?.total || 0) });
   } catch (error) {
-    console.error('List Ideas Error:', error);
+    logError('List Ideas Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleUpdateMyIdea = async (req, res) => {
   const ideaId = Number(req.params.id);
-  if (!Number.isFinite(ideaId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(ideaId) || ideaId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
 
   const unexpected = rejectUnexpectedFields(req.body, ['title', 'description', 'category']);
   if (!unexpected.ok) return res.status(400).json({ error: unexpected.error, fields: unexpected.fields });
@@ -141,7 +142,7 @@ export const handleUpdateMyIdea = async (req, res) => {
   if (!descriptionValidation.ok) return res.status(400).json({ error: descriptionValidation.error });
 
   const userId = Number(req.auth?.sub);
-  if (!Number.isFinite(userId)) return res.status(400).json({ error: 'INVALID_USER_ID' });
+  if ((!Number.isSafeInteger(userId) || userId <= 0)) return res.status(400).json({ error: 'INVALID_USER_ID' });
 
   try {
     const [rows] = await db.query(
@@ -159,17 +160,17 @@ export const handleUpdateMyIdea = async (req, res) => {
     const [updated] = await db.query('SELECT * FROM user_ideas WHERE id = ? LIMIT 1', [ideaId]);
     res.json(mapIdea(updated[0]));
   } catch (error) {
-    console.error('Update Idea Error:', error);
+    logError('Update Idea Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleDeleteMyIdea = async (req, res) => {
   const ideaId = Number(req.params.id);
-  if (!Number.isFinite(ideaId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(ideaId) || ideaId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
 
   const userId = Number(req.auth?.sub);
-  if (!Number.isFinite(userId)) return res.status(400).json({ error: 'INVALID_USER_ID' });
+  if ((!Number.isSafeInteger(userId) || userId <= 0)) return res.status(400).json({ error: 'INVALID_USER_ID' });
 
   try {
     const [rows] = await db.query(
@@ -183,7 +184,7 @@ export const handleDeleteMyIdea = async (req, res) => {
     await auditLog(db, req, 'idea.delete', 'user_idea', ideaId);
     res.json({ success: true });
   } catch (error) {
-    console.error('Delete Idea Error:', error);
+    logError('Delete Idea Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -248,14 +249,14 @@ export const handleAdminListIdeas = async (req, res) => {
     );
     res.json({ items: rows.map(mapAdminIdea), page, pageSize, total: Number(countRows?.[0]?.total || 0) });
   } catch (error) {
-    console.error('Admin List Ideas Error:', error);
+    logError('Admin List Ideas Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleAdminGetIdeaDetail = async (req, res) => {
   const ideaId = Number(req.params.id);
-  if (!Number.isFinite(ideaId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(ideaId) || ideaId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
 
   try {
     const [rows] = await db.query(
@@ -276,14 +277,14 @@ export const handleAdminGetIdeaDetail = async (req, res) => {
     );
     res.json({ idea: mapAdminIdea(rows[0]), history });
   } catch (error) {
-    console.error('Admin Get Idea Error:', error);
+    logError('Admin Get Idea Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleAdminUpdateIdea = async (req, res) => {
   const ideaId = Number(req.params.id);
-  if (!Number.isFinite(ideaId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(ideaId) || ideaId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
 
   const unexpected = rejectUnexpectedFields(req.body, ['status', 'adminResponse', 'adminNote']);
   if (!unexpected.ok) return res.status(400).json({ error: unexpected.error, fields: unexpected.fields });
@@ -358,9 +359,9 @@ export const handleAdminUpdateIdea = async (req, res) => {
     }
 
     await conn.commit();
-    await auditLog(db, req, 'admin.idea_update', 'user_idea', ideaId, { fromStatus, toStatus: nextStatus });
+    await auditLog(conn, req, 'admin.idea_update', 'user_idea', ideaId, { fromStatus, toStatus: nextStatus });
 
-    const [updated] = await db.query(
+    const [updated] = await conn.query(
       `SELECT i.*, u.name AS user_name, u.student_id AS user_student_id, u.national_code AS user_national_code
        FROM user_ideas i
        JOIN users u ON u.id = i.user_id
@@ -370,7 +371,7 @@ export const handleAdminUpdateIdea = async (req, res) => {
     res.json(mapAdminIdea(updated[0]));
   } catch (error) {
     await conn.rollback();
-    console.error('Admin Update Idea Error:', error);
+    logError('Admin Update Idea Error:', error);
     res.status(500).json({ error: 'Server error' });
   } finally {
     conn.release();
@@ -382,7 +383,7 @@ export const handleAdminUpdateIdea = async (req, res) => {
 // --------------------
 export const handleGetMyNotifications = async (req, res) => {
   const userId = Number(req.auth?.sub);
-  if (!Number.isFinite(userId)) return res.status(400).json({ error: 'INVALID_USER_ID' });
+  if ((!Number.isSafeInteger(userId) || userId <= 0)) return res.status(400).json({ error: 'INVALID_USER_ID' });
 
   const pageValidation = parsePositiveInt(req.query.page, { min: 1, max: 1_000_000, error: 'INVALID_NUMBER' });
   const pageSizeValidation = parsePositiveInt(req.query.pageSize, { min: 1, max: 50, error: 'INVALID_NUMBER' });
@@ -418,22 +419,22 @@ export const handleGetMyNotifications = async (req, res) => {
       total: Number(countRows?.[0]?.total || 0)
     });
   } catch (error) {
-    console.error('List Notifications Error:', error);
+    logError('List Notifications Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleMarkNotificationRead = async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(id) || id <= 0)) return res.status(400).json({ error: 'Invalid ID' });
   const userId = Number(req.auth?.sub);
-  if (!Number.isFinite(userId)) return res.status(400).json({ error: 'INVALID_USER_ID' });
+  if ((!Number.isSafeInteger(userId) || userId <= 0)) return res.status(400).json({ error: 'INVALID_USER_ID' });
 
   try {
     await db.query(`UPDATE user_notifications SET is_read = 1 WHERE id = ? AND user_id = ?`, [id, userId]);
     res.json({ success: true });
   } catch (error) {
-    console.error('Mark Notification Read Error:', error);
+    logError('Mark Notification Read Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };

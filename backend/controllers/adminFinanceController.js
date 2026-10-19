@@ -1,3 +1,4 @@
+import { logError } from '../logging.js';
 
 import { db } from '../db.js';
 import { auditLog } from '../security.js';
@@ -12,6 +13,9 @@ export const handleGetFinanceData = async (req, res) => {
   const startDate = req.query.startDate; // YYYY-MM-DD
   const endDate = req.query.endDate;     // YYYY-MM-DD
   
+  if (!['student', 'driver', 'company'].includes(type)) return res.status(400).json({ error: 'نوع گزارش معتبر نیست.' });
+  const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value));
+  if ((startDate && !validDate(startDate)) || (endDate && !validDate(endDate))) return res.status(400).json({ error: 'تاریخ گزارش معتبر نیست.' });
   const commissionPercent = await getCommissionPercent();
 
   try {
@@ -61,7 +65,8 @@ export const handleGetFinanceData = async (req, res) => {
         SELECT t.id, d.name, d.license_plate as identifier, t.price_paid, t.created_at, t.validation_code as tracking_number
         FROM tickets t
         JOIN buses b ON b.id = t.bus_id
-        JOIN drivers d ON CONCAT(d.name, ' - ', d.license_plate) = b.bus_number
+        LEFT JOIN schedules sc ON sc.id = b.schedule_id
+        JOIN drivers d ON (d.id = COALESCE(b.driver_id, sc.driver_id) OR (b.driver_id IS NULL AND b.schedule_id IS NULL AND CONCAT(d.name, ' - ', d.license_plate) = b.bus_number))
         WHERE (t.status = 'active' OR t.status = 'expired')
         ${dateFilter}
         ORDER BY t.created_at DESC
@@ -92,7 +97,7 @@ export const handleGetFinanceData = async (req, res) => {
 
     res.json(rows);
   } catch (error) {
-    console.error('Finance Data Error:', error);
+    logError('Finance Data Error:', error);
     res.status(500).json({ error: 'Server error retrieving finance data' });
   }
 };
@@ -163,7 +168,7 @@ export const handleUpdateSettings = async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Update Settings Error:', error);
+    logError('Update Settings Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };

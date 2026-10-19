@@ -89,7 +89,7 @@ export const validateIranMobile = (value) => {
 
 export const parsePositiveInt = (value, { min = 1, max = Number.MAX_SAFE_INTEGER, error = 'INVALID_NUMBER' } = {}) => {
   const normalized = normalizeDigits(value).trim();
-  if (!/^\d+$/.test(normalized)) return { ok: false, error };
+  if (normalized.length > 16 || !/^\d+$/.test(normalized) || !Number.isSafeInteger(min) || !Number.isSafeInteger(max)) return { ok: false, error };
   const asBigInt = BigInt(normalized);
   if (asBigInt < BigInt(min) || asBigInt > BigInt(max)) return { ok: false, error };
   const number = Number(asBigInt);
@@ -104,6 +104,7 @@ export const parseMoneyToman = (value, {
 } = {}) => {
   const normalized = normalizeDigits(value).replace(/,/g, '').trim();
   if (!/^\d+$/.test(normalized)) return { ok: false, error };
+  if (normalized.length > 15) return { ok: false, error: 'AMOUNT_LIMIT' };
   const asBigInt = BigInt(normalized);
   if (asBigInt < BigInt(min)) return { ok: false, error: 'AMOUNT_MIN' };
   if (asBigInt > BigInt(max)) return { ok: false, error: 'AMOUNT_LIMIT' };

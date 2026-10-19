@@ -1,3 +1,4 @@
+import { logError } from '../logging.js';
 import { db } from '../db.js';
 import { auditLog } from '../security.js';
 import { sanitizeText } from '../validation.js';
@@ -31,7 +32,7 @@ export const handleGetLegalContent = async (req, res) => {
       updatedAt: rows[0].updated_at
     });
   } catch (error) {
-    console.error('Get legal content error:', error);
+    logError('Get legal content error:', error);
     return res.status(500).json({ error: 'Server error' });
   }
 };
@@ -52,7 +53,7 @@ export const handleUpsertLegalContent = async (req, res) => {
     await auditLog(db, req, 'admin.legal_update', 'legal_contents', audience, { audience });
     return res.json({ success: true });
   } catch (error) {
-    console.error('Upsert legal content error:', error);
+    logError('Upsert legal content error:', error);
     return res.status(500).json({ error: 'Server error' });
   }
 };

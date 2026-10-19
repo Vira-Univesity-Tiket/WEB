@@ -56,6 +56,11 @@ console.info(
   `[DB CONFIG] host=${String(process.env.DB_HOST || '').trim() || 'MISSING'} port=${Number(process.env.DB_PORT || 3306)} db=${String(process.env.DB_NAME || '').trim() || 'MISSING'}`
 );
 
+// Keep SQL date boundaries consistent with the university service day.
+db.pool.on('connection', (connection) => {
+  connection.query("SET time_zone = '+03:30'");
+});
+
 // Database Initialization & Migration Script
 export const initDB = async () => {
   let conn;
@@ -76,6 +81,12 @@ export const initDB = async () => {
 
     for (const statement of schemaStatements) {
       await conn.query(statement);
+    }
+    if (process.env.SEED_DEMO_DATA === 'true' && !['production'].includes(String(process.env.BACKEND_NODE_ENV || process.env.NODE_ENV))) {
+      const demoSql = await readFile(path.resolve(__dirname, 'demo_seed.sql'), 'utf8');
+      for (const statement of demoSql.split('\n').filter(line => !line.trim().startsWith('--')).join('\n').split(';').map(item => item.trim()).filter(Boolean)) {
+        await conn.query(statement);
+      }
     }
     console.log('✅ Base database schema applied.');
 
@@ -115,11 +126,6 @@ export const initDB = async () => {
       `);
       // Update status enum to include pending/rejected
       await conn.query("ALTER TABLE drivers MODIFY COLUMN status ENUM('active','inactive','pending','rejected') NOT NULL DEFAULT 'pending'");
-    }
-
-    if (await checkColumn('drivers', 'pin_code')) {
-      console.log('⚡ Migrating: Removing deprecated "pin_code" from drivers table...');
-      await conn.query('ALTER TABLE drivers DROP COLUMN pin_code');
     }
 
     // --- USERS TABLE MIGRATION ---
@@ -174,12 +180,12 @@ export const initDB = async () => {
         const uniqueQrIndexes = indexes.filter(idx => 
             idx.Column_name === 'qr_code' && 
             idx.Non_unique === 0 && 
-            idx.Key_name !== 'PRIMARY'
+            idx.Key_name !== 'PRIMARY' && indexes.filter(item => item.Key_name === idx.Key_name).length === 1
         );
 
         for (const idx of uniqueQrIndexes) {
             console.log(`⚡ Migrating: Dropping UNIQUE constraint "${idx.Key_name}" on tickets.qr_code...`);
-            await conn.query(`ALTER TABLE tickets DROP INDEX ${idx.Key_name}`);
+            await conn.query(`ALTER TABLE tickets DROP INDEX \`${String(idx.Key_name).replace(/`/g, '``')}\``);
         }
 
         // Ensure we have a standard non-unique index for performance
@@ -190,7 +196,7 @@ export const initDB = async () => {
         }
 
     } catch (e) {
-        console.warn("   > Warning during ticket index migration:", e.message);
+        throw new Error("Ticket QR index migration failed", { cause: e });
     }
 
     // --- BUSES TABLE MIGRATION (Fixes "Unknown column created_at") ---
@@ -211,6 +217,12 @@ export const initDB = async () => {
         ADD CONSTRAINT fk_buses_origin_station FOREIGN KEY (origin_station_id) REFERENCES stations(id),
         ADD CONSTRAINT fk_buses_destination_station FOREIGN KEY (destination_station_id) REFERENCES stations(id)
       `);
+    }
+
+    // Preserve the driver recorded at sale time when a recurring schedule is reassigned later.
+    if (!(await checkColumn('buses', 'driver_id'))) {
+      await conn.query('ALTER TABLE buses ADD COLUMN driver_id INT DEFAULT NULL AFTER schedule_id, ADD INDEX idx_buses_driver (driver_id)');
+      await conn.query("UPDATE buses b JOIN drivers d ON CONCAT(d.name, ' - ', d.license_plate) = b.bus_number SET b.driver_id = d.id WHERE b.driver_id IS NULL");
     }
 
     // --- NOTIFICATIONS TABLE ---
@@ -267,10 +279,6 @@ export const initDB = async () => {
     
     await conn.query(`INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('commission_percent', '10')`);
     await conn.query(`INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('payment_topup_expiry_minutes', '20')`);
-    await conn.query(
-      "UPDATE users SET national_code = '1234567891' WHERE student_id = '40211890' AND national_code = '0023456789'"
-    );
-
     // --- ADMIN / ANALYST ACCOUNTS ---
     await conn.query(`
       CREATE TABLE IF NOT EXISTS admin_accounts (
@@ -295,7 +303,7 @@ export const initDB = async () => {
       'SELECT id FROM admin_accounts WHERE username = ? LIMIT 1',
       [adminUsername]
     );
-    if (!existingAdminRows || existingAdminRows.length === 0) {
+    if (adminUsername && adminPassword && (!existingAdminRows || existingAdminRows.length === 0)) {
       const passwordHash = await hashPassword(adminPassword);
       await conn.query(
         `INSERT INTO admin_accounts (username, password_hash, role, status, created_by, updated_by)
@@ -518,6 +526,7 @@ export const initDB = async () => {
     } else if (err.code === 'ER_BAD_DB_ERROR') {
       console.error('   -> Check your DB_NAME in .env');
     }
+    throw err;
   } finally {
     if (conn) conn.release();
   }

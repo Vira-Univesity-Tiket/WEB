@@ -1,8 +1,11 @@
+import { logError } from '../logging.js';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { db } from '../db.js';
 import { auditLog } from '../security.js';
 import { sanitizeText } from '../validation.js';
+import { parseUpload } from '../services/uploadValidation.js';
+import { randomUUID } from 'node:crypto';
 
 const TICKET_ROOT = process.env.TICKET_STORAGE_ROOT
   ? path.resolve(process.env.TICKET_STORAGE_ROOT)
@@ -20,7 +23,7 @@ const MAX_FILE_BYTES = Number(process.env.SUPPORT_TICKET_MAX_FILE_BYTES || 5 * 1
 const MAX_FILES_PER_MESSAGE = Number(process.env.SUPPORT_TICKET_MAX_FILES || 5);
 
 const ensureDir = async (p) => {
-  await fs.mkdir(p, { recursive: true });
+  await fs.mkdir(p, { recursive: true, mode: 0o700 });
 };
 
 const safeSegment = (value, fallback = 'user') => {
@@ -53,21 +56,15 @@ const tehranStamp = (date = new Date()) => {
   return { date: `${y}-${m}-${d}`, time: `${hh}-${mm}-${ss}` };
 };
 
-const parseDataUrl = (dataUrl) => {
-  if (typeof dataUrl !== 'string') return { ok: false, error: 'فایل نامعتبر است.' };
-  const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!m) return { ok: false, error: 'فرمت فایل نامعتبر است.' };
-  const mime = m[1];
-  if (!ALLOWED_MIME.has(mime)) return { ok: false, error: 'فرمت فایل مجاز نیست.' };
-  const base64 = m[2];
-  let buf;
-  try {
-    buf = Buffer.from(base64, 'base64');
-  } catch {
-    return { ok: false, error: 'فایل نامعتبر است.' };
-  }
-  if (!buf.length || buf.length > MAX_FILE_BYTES) return { ok: false, error: 'حجم فایل بیش از حد مجاز است.' };
-  return { ok: true, mime, buffer: buf };
+const parseDataUrl = (value) => parseUpload(value, { maxBytes: MAX_FILE_BYTES, allowedMime: [...ALLOWED_MIME] });
+const resolveTicketPath = (relativePath) => {
+  const resolved = path.resolve(TICKET_ROOT, relativePath);
+  if (!resolved.startsWith(`${TICKET_ROOT}${path.sep}`)) throw new Error('Invalid ticket storage path');
+  return resolved;
+};
+const syncTicketTxt = async (id, executor) => {
+  try { await writeTicketTxt(id, executor); }
+  catch (error) { console.warn('Ticket TXT synchronization failed:', error.code || 'FILE_WRITE_FAILED'); }
 };
 
 const extForMime = (mime) => {
@@ -86,18 +83,18 @@ const getUserByStudentId = async (studentId) => {
   return rows?.[0] || null;
 };
 
-const getTicketStoragePath = async (ticketId) => {
-  const [rows] = await db.query('SELECT storage_path FROM support_tickets WHERE id = ? LIMIT 1', [ticketId]);
+const getTicketStoragePath = async (ticketId, executor = db) => {
+  const [rows] = await executor.query('SELECT storage_path FROM support_tickets WHERE id = ? LIMIT 1', [ticketId]);
   return rows?.[0]?.storage_path || null;
 };
 
-const writeTicketTxt = async (ticketId) => {
-  const storagePath = await getTicketStoragePath(ticketId);
+const writeTicketTxt = async (ticketId, executor = db) => {
+  const storagePath = await getTicketStoragePath(ticketId, executor);
   if (!storagePath) return null;
-  const absDir = path.join(TICKET_ROOT, storagePath);
+  const absDir = resolveTicketPath(storagePath);
   await ensureDir(absDir);
 
-  const [[ticket]] = await db.query(
+  const [[ticket]] = await executor.query(
     `SELECT st.id, st.title, st.status, st.created_at, st.closed_at,
             u.student_id, u.name
      FROM support_tickets st
@@ -107,7 +104,7 @@ const writeTicketTxt = async (ticketId) => {
   );
   if (!ticket) return null;
 
-  const [messages] = await db.query(
+  const [messages] = await executor.query(
     `SELECT m.id, m.sender_role, m.sender_id, m.message, m.created_at
      FROM support_ticket_messages m
      WHERE m.ticket_id = ?
@@ -115,7 +112,7 @@ const writeTicketTxt = async (ticketId) => {
     [ticketId]
   );
 
-  const [attachments] = await db.query(
+  const [attachments] = await executor.query(
     `SELECT a.id, a.message_id, a.original_name, a.mime_type, a.size_bytes, a.created_at, a.uploader_role, a.uploader_id
      FROM support_ticket_attachments a
      WHERE a.ticket_id = ?
@@ -123,7 +120,7 @@ const writeTicketTxt = async (ticketId) => {
     [ticketId]
   );
 
-  const [history] = await db.query(
+  const [history] = await executor.query(
     `SELECT h.from_status, h.to_status, h.actor_role, h.actor_id, h.note, h.created_at
      FROM support_ticket_status_history h
      WHERE h.ticket_id = ?
@@ -160,7 +157,7 @@ const writeTicketTxt = async (ticketId) => {
   lines.push('');
 
   const txtPath = path.join(absDir, 'ticket.txt');
-  await fs.writeFile(txtPath, lines.join('\n'), { encoding: 'utf8' });
+  await fs.writeFile(txtPath, lines.join('\n'), { encoding: 'utf8', mode: 0o600 });
   return txtPath;
 };
 
@@ -178,6 +175,17 @@ export const handleCreateSupportTicket = async (req, res) => {
   if (!title || !message) return res.status(400).json({ error: 'تکمیل عنوان و توضیحات الزامی است.' });
   if (attachments.length > MAX_FILES_PER_MESSAGE) return res.status(400).json({ error: 'تعداد فایل‌های ضمیمه بیش از حد مجاز است.' });
 
+  const parsedAttachments = [];
+  let attachmentBytes = 0;
+  for (const file of attachments) {
+    const parsed = parseDataUrl(file?.dataUrl);
+    if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+    attachmentBytes += parsed.buffer.length;
+    if (attachmentBytes > 8 * 1024 * 1024) return res.status(400).json({ error: 'مجموع ضمیمه‌های هر پیام باید حداکثر ۸ مگابایت باشد.' });
+    parsedAttachments.push({ originalName: sanitizeText(file?.name || 'file', 120) || 'file', parsed });
+  }
+  const writtenFiles = [];
+  let committed = false;
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
@@ -192,7 +200,7 @@ export const handleCreateSupportTicket = async (req, res) => {
     );
     const ticketId = ticketResult.insertId;
     const storagePath = path.join(userSegment, `${ticketId}*${stamp.date}*${stamp.time}`);
-    const absDir = path.join(TICKET_ROOT, storagePath);
+    const absDir = resolveTicketPath(storagePath);
     await ensureDir(absDir); // must exist even with no files
 
     await connection.query(
@@ -207,18 +215,13 @@ export const handleCreateSupportTicket = async (req, res) => {
     );
     const messageId = msgResult.insertId;
 
-    for (const f of attachments) {
-      const originalName = sanitizeText(f?.name || 'file', 120) || 'file';
-      const parsed = parseDataUrl(f?.dataUrl);
-      if (!parsed.ok) {
-        await connection.rollback();
-        return res.status(400).json({ error: parsed.error });
-      }
+    for (const { originalName, parsed } of parsedAttachments) {
       const ext = extForMime(parsed.mime);
-      const storedName = `${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
+      const storedName = `${randomUUID()}.${ext}`;
       const relFile = path.join(storagePath, storedName);
-      const absFile = path.join(TICKET_ROOT, relFile);
-      await fs.writeFile(absFile, parsed.buffer, { flag: 'wx' });
+      const absFile = resolveTicketPath(relFile);
+      await fs.writeFile(absFile, parsed.buffer, { flag: 'wx', mode: 0o600 });
+      writtenFiles.push(absFile);
 
       await connection.query(
         `INSERT INTO support_ticket_attachments
@@ -235,7 +238,8 @@ export const handleCreateSupportTicket = async (req, res) => {
     );
 
     await connection.commit();
-    await auditLog(db, req, 'support.ticket_create', 'support_ticket', ticketId, { title });
+    committed = true;
+    await auditLog(connection, req, 'support.ticket_create', 'support_ticket', ticketId, { title });
 
     res.json({
       success: true,
@@ -248,10 +252,11 @@ export const handleCreateSupportTicket = async (req, res) => {
     });
   } catch (error) {
     await connection.rollback();
-    console.error('Create support ticket error:', error);
+    logError('Create support ticket error:', error);
     res.status(500).json({ error: 'Server error' });
   } finally {
     connection.release();
+    if (!committed) await Promise.all(writtenFiles.map(file => fs.rm(file, { force: true })));
   }
 };
 
@@ -285,7 +290,7 @@ export const handleListSupportTickets = async (req, res) => {
 
 export const handleGetSupportTicket = async (req, res) => {
   const ticketId = Number(req.params.ticketId);
-  if (!Number.isFinite(ticketId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(ticketId) || ticketId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
 
   const role = req.auth?.role;
   const studentId = req.auth?.studentId;
@@ -301,7 +306,7 @@ export const handleGetSupportTicket = async (req, res) => {
   if (!ticketRows.length) return res.status(404).json({ error: 'تیکت یافت نشد' });
   const ticket = ticketRows[0];
 
-  if (role === 'user' && studentId && studentId !== ticket.student_id) return res.status(403).json({ error: 'Forbidden' });
+  if (role === 'user' && (!studentId || studentId !== ticket.student_id)) return res.status(403).json({ error: 'Forbidden' });
 
   const [messages] = await db.query(
     `SELECT id, sender_role, sender_id, message, created_at
@@ -348,7 +353,7 @@ export const handleGetSupportTicket = async (req, res) => {
 
 export const handleAddSupportTicketMessage = async (req, res) => {
   const ticketId = Number(req.params.ticketId);
-  if (!Number.isFinite(ticketId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(ticketId) || ticketId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
 
   const role = req.auth?.role;
   const studentId = req.auth?.studentId;
@@ -369,9 +374,20 @@ export const handleAddSupportTicketMessage = async (req, res) => {
   if (!ticketRows.length) return res.status(404).json({ error: 'تیکت یافت نشد' });
   const ticket = ticketRows[0];
 
-  if (role === 'user' && studentId && studentId !== ticket.student_id) return res.status(403).json({ error: 'Forbidden' });
+  if (role === 'user' && (!studentId || studentId !== ticket.student_id)) return res.status(403).json({ error: 'Forbidden' });
   if (role === 'user' && ticket.status === 'closed') return res.status(400).json({ error: 'تیکت بسته است.' });
 
+  const parsedAttachments = [];
+  let attachmentBytes = 0;
+  for (const file of attachments) {
+    const parsed = parseDataUrl(file?.dataUrl);
+    if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+    attachmentBytes += parsed.buffer.length;
+    if (attachmentBytes > 8 * 1024 * 1024) return res.status(400).json({ error: 'مجموع ضمیمه‌های هر پیام باید حداکثر ۸ مگابایت باشد.' });
+    parsedAttachments.push({ originalName: sanitizeText(file?.name || 'file', 120) || 'file', parsed });
+  }
+  const writtenFiles = [];
+  let committed = false;
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
@@ -386,22 +402,17 @@ export const handleAddSupportTicketMessage = async (req, res) => {
     );
     const messageId = msgResult.insertId;
 
-    const storagePath = ticket.storage_path || (await getTicketStoragePath(ticketId));
-    const absDir = path.join(TICKET_ROOT, storagePath || '');
+    const storagePath = ticket.storage_path || (await getTicketStoragePath(ticketId, connection));
+    const absDir = resolveTicketPath(storagePath || '');
     await ensureDir(absDir);
 
-    for (const f of attachments) {
-      const originalName = sanitizeText(f?.name || 'file', 120) || 'file';
-      const parsed = parseDataUrl(f?.dataUrl);
-      if (!parsed.ok) {
-        await connection.rollback();
-        return res.status(400).json({ error: parsed.error });
-      }
+    for (const { originalName, parsed } of parsedAttachments) {
       const ext = extForMime(parsed.mime);
-      const storedName = `${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
+      const storedName = `${randomUUID()}.${ext}`;
       const relFile = path.join(storagePath, storedName);
-      const absFile = path.join(TICKET_ROOT, relFile);
-      await fs.writeFile(absFile, parsed.buffer, { flag: 'wx' });
+      const absFile = resolveTicketPath(relFile);
+      await fs.writeFile(absFile, parsed.buffer, { flag: 'wx', mode: 0o600 });
+      writtenFiles.push(absFile);
 
       await connection.query(
         `INSERT INTO support_ticket_attachments
@@ -431,16 +442,18 @@ export const handleAddSupportTicketMessage = async (req, res) => {
     }
 
     await connection.commit();
-    await auditLog(db, req, 'support.ticket_message', 'support_ticket', ticketId, { senderRole });
+    committed = true;
+    await auditLog(connection, req, 'support.ticket_message', 'support_ticket', ticketId, { senderRole });
 
-    await writeTicketTxt(ticketId); // keep TXT updated on every message
+    await syncTicketTxt(ticketId, connection); // keep TXT updated on every message
     res.json({ success: true, messageId: String(messageId) });
   } catch (error) {
     await connection.rollback();
-    console.error('Add support ticket message error:', error);
+    logError('Add support ticket message error:', error);
     res.status(500).json({ error: 'Server error' });
   } finally {
     connection.release();
+    if (!committed) await Promise.all(writtenFiles.map(file => fs.rm(file, { force: true })));
   }
 };
 
@@ -471,7 +484,7 @@ export const handleAdminListSupportTickets = async (req, res) => {
 
 export const handleAdminSetSupportTicketStatus = async (req, res) => {
   const ticketId = Number(req.params.ticketId);
-  if (!Number.isFinite(ticketId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(ticketId) || ticketId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
   const toStatus = String(req.body?.status || '').trim();
   const note = sanitizeText(req.body?.note || '', 255);
   const adminId = req.auth?.sub ? String(req.auth.sub) : null;
@@ -495,7 +508,7 @@ export const handleAdminSetSupportTicketStatus = async (req, res) => {
     }
 
     await connection.query(
-      'UPDATE support_tickets SET status = ?, closed_at = IF(? = \"closed\", CURRENT_TIMESTAMP, NULL), updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE support_tickets SET status = ?, closed_at = IF(? = "closed", CURRENT_TIMESTAMP, NULL), updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [toStatus, toStatus, ticketId]
     );
     await connection.query(
@@ -505,14 +518,14 @@ export const handleAdminSetSupportTicketStatus = async (req, res) => {
     );
 
     await connection.commit();
-    await auditLog(db, req, 'support.ticket_status_change', 'support_ticket', ticketId, { fromStatus, toStatus });
+    await auditLog(connection, req, 'support.ticket_status_change', 'support_ticket', ticketId, { fromStatus, toStatus });
 
     // Generate/update TXT on close or reopen
-    await writeTicketTxt(ticketId);
+    await syncTicketTxt(ticketId, connection);
     res.json({ success: true });
   } catch (error) {
     await connection.rollback();
-    console.error('Set support ticket status error:', error);
+    logError('Set support ticket status error:', error);
     res.status(500).json({ error: 'Server error' });
   } finally {
     connection.release();
@@ -521,7 +534,7 @@ export const handleAdminSetSupportTicketStatus = async (req, res) => {
 
 export const handleDownloadSupportAttachment = async (req, res) => {
   const attachmentId = Number(req.params.attachmentId);
-  if (!Number.isFinite(attachmentId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(attachmentId) || attachmentId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
 
   const [rows] = await db.query(
     `SELECT a.ticket_id, a.original_name, a.rel_path, st.user_id, u.student_id
@@ -535,16 +548,14 @@ export const handleDownloadSupportAttachment = async (req, res) => {
   const a = rows[0];
 
   const role = req.auth?.role;
-  if (role === 'user' && req.auth?.studentId && req.auth.studentId !== a.student_id) return res.status(403).json({ error: 'Forbidden' });
+  if (role === 'user' && req.auth?.studentId !== a.student_id) return res.status(403).json({ error: 'Forbidden' });
   if (role !== 'admin' && role !== 'user') return res.status(403).json({ error: 'Forbidden' });
 
-  const abs = path.join(TICKET_ROOT, a.rel_path);
-  // Ensure path stays under root
-  if (!abs.startsWith(TICKET_ROOT)) return res.status(403).json({ error: 'Forbidden' });
+  const abs = resolveTicketPath(a.rel_path);
 
   try {
     await auditLog(db, req, 'support.attachment_download', 'support_ticket', a.ticket_id, { attachmentId });
-    res.download(abs, a.original_name || `attachment-${attachmentId}`);
+    res.download(abs, a.original_name || `attachment-${attachmentId}`, error => { if (error && !res.headersSent) res.status(404).json({ error: 'فایل یافت نشد' }); });
   } catch (e) {
     res.status(404).json({ error: 'فایل یافت نشد' });
   }
@@ -552,7 +563,7 @@ export const handleDownloadSupportAttachment = async (req, res) => {
 
 export const handleDownloadSupportTicketTxt = async (req, res) => {
   const ticketId = Number(req.params.ticketId);
-  if (!Number.isFinite(ticketId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(ticketId) || ticketId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
 
   const [rows] = await db.query(
     `SELECT st.storage_path, u.student_id
@@ -564,17 +575,16 @@ export const handleDownloadSupportTicketTxt = async (req, res) => {
   if (!rows.length) return res.status(404).json({ error: 'تیکت یافت نشد' });
   const t = rows[0];
   const role = req.auth?.role;
-  if (role === 'user' && req.auth?.studentId && req.auth.studentId !== t.student_id) return res.status(403).json({ error: 'Forbidden' });
+  if (role === 'user' && req.auth?.studentId !== t.student_id) return res.status(403).json({ error: 'Forbidden' });
   if (role !== 'admin' && role !== 'user') return res.status(403).json({ error: 'Forbidden' });
 
-  const absDir = path.join(TICKET_ROOT, t.storage_path);
+  const absDir = resolveTicketPath(t.storage_path);
   const absFile = path.join(absDir, 'ticket.txt');
   try {
     await writeTicketTxt(ticketId);
     await auditLog(db, req, 'support.ticket_txt_download', 'support_ticket', ticketId);
-    res.download(absFile, `ticket-${ticketId}.txt`);
+    res.download(absFile, `ticket-${ticketId}.txt`, error => { if (error && !res.headersSent) res.status(404).json({ error: 'فایل یافت نشد' }); });
   } catch {
     res.status(404).json({ error: 'فایل یافت نشد' });
   }
 };
-

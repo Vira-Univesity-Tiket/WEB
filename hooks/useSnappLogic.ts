@@ -1,17 +1,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { ViewState, BookingStage, BusOption, ChatMessage, UserProfile, Ticket, Transaction, AuthStage, Language, ToastState, Station, AppNotification } from '../types';
-import { adminLoginAPI, clearAuthTokens, getBusSchedule, getStations, getUserTickets, getWalletTransactions, loginAPI, registerAPI, reserveTicket, submitTicketFeedback, updateProfileAPI, getActiveNotification } from '../services/apiService';
+import { adminLoginAPI, clearAuthTokens, getBusSchedule, getStations, getUserTickets, getWalletTransactions, getCurrentUserAPI, chatWithSupport, loginAPI, registerAPI, reserveTicket, submitTicketFeedback, updateProfileAPI, getActiveNotification } from '../services/apiService';
 import { INITIAL_CHAT_MESSAGE, DEFAULT_USER_PROFILE, MOCK_TICKETS, MOCK_TRANSACTIONS } from '../constants';
 import { MapRef } from '../components/MapVisual';
 import { formatAmountFa } from '../utils/numberUtils';
-// Import removed to break dependency on AI service, we handle logic locally or via simple placeholder
-// import { getSmartSupportResponse } from '../services/geminiService';
-
-// Backend logic generally handles conversions now, but if we receive raw numbers that need formatting:
-// This function assumes the input might be Rial if it's a raw number from a balance update,
-// but for consistent UI, we usually receive formatted strings from backend auth.
-// However, reserveTicket returns a numeric balance (Rial).
 const formatBalance = (amountRial: number): string => {
   const amountToman = Math.round(amountRial / 10);
   return `${formatAmountFa(amountToman)} تومان`;
@@ -22,13 +15,21 @@ const ADMIN_STORAGE_KEY = 'vira_admin_session';
 const ADMIN_AUTH_KEY = 'vira_admin_auth_meta';
 
 export const useSnappLogic = () => {
-  const storedProfileStr = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-  const storedProfile = storedProfileStr ? JSON.parse(storedProfileStr) : null;
-  
-  // Security Fix: Use sessionStorage so admin access clears on browser close.
-  const storedAdminSession = typeof window !== 'undefined' ? sessionStorage.getItem(ADMIN_STORAGE_KEY) : null;
-  const storedAdminMetaRaw = typeof window !== 'undefined' ? sessionStorage.getItem(ADMIN_AUTH_KEY) : null;
-  const storedAdminMeta = storedAdminMetaRaw ? JSON.parse(storedAdminMetaRaw) : null;
+  const readJson = (storage: Storage, key: string) => {
+    try { const value = JSON.parse(storage.getItem(key) || 'null'); return value && typeof value === 'object' && !Array.isArray(value) ? value : null; }
+    catch { storage.removeItem(key); return null; }
+  };
+  const [storedProfile] = useState(() => {
+    const profile = readJson(localStorage, STORAGE_KEY);
+    return profile?.studentId && localStorage.getItem('vira_user_auth_token') ? profile : null;
+  });
+  const [storedAdminSession] = useState(() => sessionStorage.getItem(ADMIN_STORAGE_KEY));
+  const [storedAdminMeta] = useState(() => readJson(sessionStorage, ADMIN_AUTH_KEY));
+  const isDriverRoute = /^\/(driver|deriver)(?:\/|$)/.test(window.location.pathname);
+  const persistProfile = (profile: UserProfile) => {
+    // Credentials are fetched with the session token and never persisted in profile cache.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...profile, nationalCode: '' }));
+  };
 
   const isSuperAdminRoute = typeof window !== 'undefined' && (
     window.location.pathname.includes('/mohd/super/admin') ||
@@ -48,7 +49,7 @@ export const useSnappLogic = () => {
     if (isSuperAdminRoute) {
         return storedAdminSession === 'true' ? ViewState.ADMIN_DASHBOARD : ViewState.ADMIN_LOGIN;
     }
-    // Default to Home for any other route (including root)
+    if (new URLSearchParams(window.location.search).has('topupTransactionId')) return ViewState.WALLET;
     return ViewState.HOME;
   });
   
@@ -63,6 +64,12 @@ export const useSnappLogic = () => {
   const [origin, setOrigin] = useState<string>('');
   const [destination, setDestination] = useState<string>('');
   const [busOptions, setBusOptions] = useState<BusOption[]>([]);
+  const [bookingPending, setBookingPending] = useState(false);
+  const [issuedTicket, setIssuedTicket] = useState<Ticket | null>(null);
+  const purchaseBusy = useRef(false);
+  const purchaseRequest = useRef<{ signature: string; key: string } | null>(null);
+  const scheduleRequest = useRef(0);
+  const sessionGeneration = useRef(0);
   const [selectedBus, setSelectedBus] = useState<BusOption | null>(null);
   const [loadingSchedule, setLoadingSchedule] = useState(false);
 
@@ -84,7 +91,7 @@ export const useSnappLogic = () => {
     if (storedProfile || isSuperAdminRoute || storedAdminSession) return;
     
     const startTimer = setTimeout(() => setAuthStage(AuthStage.SPLASH_CENTER), 100);
-    const formTimer = setTimeout(() => setAuthStage(AuthStage.AUTH_FORM), 2800);
+    const formTimer = setTimeout(() => setAuthStage(AuthStage.AUTH_FORM), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 900);
     return () => {
       clearTimeout(startTimer);
       clearTimeout(formTimer);
@@ -130,21 +137,26 @@ export const useSnappLogic = () => {
   };
 
   const refreshProfileFromServer = async () => {
-    if (!userProfile?.studentId || !userProfile?.nationalCode) return;
+    if (!userProfile?.studentId) return;
+    const generation = sessionGeneration.current;
     try {
-      const profile = await loginAPI(userProfile.studentId, userProfile.nationalCode);
+      const profile = await getCurrentUserAPI();
+      if (generation !== sessionGeneration.current) return;
       setUserProfile(profile);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+      persistProfile(profile);
     } catch (error) {
-      console.warn('Profile refresh failed', error);
+      if (generation !== sessionGeneration.current) return;
+      if ([401, 403].includes((error as any)?.status)) handleLogout();
+      else showToast((error as Error).message || 'اطلاعات حساب دریافت نشد.', 'error');
     }
   };
 
   const refreshWalletTransactions = async () => {
     if (!userProfile?.studentId) return;
+    const generation = sessionGeneration.current;
     try {
       const data = await getWalletTransactions(userProfile.studentId);
-      if (Array.isArray(data)) setTransactions(data);
+      if (generation === sessionGeneration.current && Array.isArray(data)) setTransactions(data);
     } catch (error) {
       console.warn('Transactions refresh failed', error);
     }
@@ -152,9 +164,10 @@ export const useSnappLogic = () => {
 
   const refreshTicketsFromServer = async () => {
     if (!userProfile?.studentId) return;
+    const generation = sessionGeneration.current;
     try {
       const data = await getUserTickets(userProfile.studentId);
-      if (Array.isArray(data)) setTickets(data);
+      if (generation === sessionGeneration.current && Array.isArray(data)) { setTickets(data); setIssuedTicket(previous => previous ? data.find(ticket => ticket.id === previous.id) || previous : null); }
     } catch (error) {
       console.warn('Tickets refresh failed', error);
     }
@@ -163,15 +176,18 @@ export const useSnappLogic = () => {
   useEffect(() => {
     // Only fetch stations if we are not on the pure login route (to save requests)
     // or if we are already logged in
+    if (isDriverRoute || isSuperAdminRoute) return;
     refreshStations();
     // Fetch active notification on load
     fetchActiveNotification();
   }, []);
 
   useEffect(() => {
-    if (authStage !== AuthStage.LOGGED_IN || !userProfile?.studentId) return;
+    if (isDriverRoute || isSuperAdminRoute || authStage !== AuthStage.LOGGED_IN || !userProfile?.studentId) return;
     const refreshUserData = async () => {
+      const generation = sessionGeneration.current;
       await refreshProfileFromServer();
+      if (generation !== sessionGeneration.current) return;
       await Promise.all([refreshTicketsFromServer(), refreshWalletTransactions()]);
     };
     refreshUserData();
@@ -184,15 +200,25 @@ export const useSnappLogic = () => {
   }, [view]);
 
   useEffect(() => {
-    if (view !== ViewState.TICKETS) return;
-    refreshTicketsFromServer();
-  }, [view]);
+    if (view !== ViewState.TICKETS && !(view === ViewState.BUS && bookingStage === BookingStage.TICKET_VIEW)) return;
+    let pending = false;
+    const refresh = async () => {
+      if (pending || document.hidden) return;
+      pending = true;
+      try { await refreshTicketsFromServer(); } finally { pending = false; }
+    };
+    void refresh();
+    const timer = setInterval(() => { void refresh(); }, 15_000);
+    window.addEventListener('focus', refresh);
+    return () => { clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [view, bookingStage]);
 
   const handleRegister = async (name: string, studentId: string, nationalCode: string) => {
     try {
       const profile = await registerAPI(name, studentId, nationalCode);
+      sessionGeneration.current += 1;
       setUserProfile(profile);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+      persistProfile(profile);
       setAuthStage(AuthStage.LOGGED_IN);
       showToast('ثبت نام با موفقیت انجام شد', 'success');
     } catch (error: any) {
@@ -203,8 +229,9 @@ export const useSnappLogic = () => {
   const handleLogin = async (studentId: string, nationalCode: string) => {
     try {
       const profile = await loginAPI(studentId, nationalCode);
+      sessionGeneration.current += 1;
       setUserProfile(profile);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+      persistProfile(profile);
       setAuthStage(AuthStage.LOGGED_IN);
       showToast('خوش آمدید', 'success');
     } catch (error: any) {
@@ -227,6 +254,10 @@ export const useSnappLogic = () => {
   };
 
   const handleLogout = () => {
+    sessionGeneration.current += 1;
+    scheduleRequest.current += 1;
+    purchaseRequest.current = null;
+    purchaseBusy.current = false;
     localStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(ADMIN_STORAGE_KEY);
     sessionStorage.removeItem(ADMIN_AUTH_KEY);
@@ -235,6 +266,14 @@ export const useSnappLogic = () => {
     setUserProfile(DEFAULT_USER_PROFILE);
     setTickets([]);
     setTransactions([]);
+    setIssuedTicket(null);
+    setSelectedBus(null);
+    setBookingPending(false);
+    setBookingStage(BookingStage.IDLE);
+    setRatingTicketId(null);
+    setChatOpen(false);
+    setIsTyping(false);
+    setMessages([{ role: 'model', text: INITIAL_CHAT_MESSAGE }]);
 
     if (isSuperAdminRoute) {
       setView(ViewState.ADMIN_LOGIN);
@@ -246,15 +285,18 @@ export const useSnappLogic = () => {
   };
 
   const updateProfile = async (province: string, city: string, avatar: string, language: Language) => {
+    const generation = sessionGeneration.current;
     try {
       const updatedProfile = { ...userProfile, province, city, avatar, language };
-      setUserProfile(updatedProfile);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProfile));
       await updateProfileAPI(userProfile.studentId, { province, city, avatar, language });
+      if (generation !== sessionGeneration.current) return;
+      setUserProfile(updatedProfile);
+      persistProfile(updatedProfile);
       showToast('پروفایل ذخیره شد', 'success');
     } catch (error) {
+      if (generation !== sessionGeneration.current) return;
       console.error('Profile update error', error);
-      showToast('ذخیره پروفایل ناموفق بود', 'error');
+      showToast((error as Error)?.message || 'ذخیره پروفایل ناموفق بود', 'error');
     }
   };
 
@@ -292,17 +334,18 @@ export const useSnappLogic = () => {
   };
 
   const fetchBuses = async (fromId: string, toId: string) => {
+    const request = ++scheduleRequest.current;
+    if (fromId === toId) { setBusOptions([]); setLoadingSchedule(false); showToast('مبدا و مقصد باید متفاوت باشند.', 'error'); return; }
     setBookingStage(BookingStage.SELECT_BUS);
     setLoadingSchedule(true);
 
     try {
       const options = await getBusSchedule(fromId, toId);
-      setBusOptions(Array.isArray(options) ? options : []);
+      if (request === scheduleRequest.current) setBusOptions(Array.isArray(options) ? options : []);
     } catch (error: any) {
-      showToast(error?.message || 'دریافت برنامه سرویس ناموفق بود', 'error');
-      setBusOptions([]);
+      if (request === scheduleRequest.current) { showToast(error?.message || 'دریافت برنامه سرویس ناموفق بود', 'error'); setBusOptions([]); }
     } finally {
-      setLoadingSchedule(false);
+      if (request === scheduleRequest.current) setLoadingSchedule(false);
     }
   };
 
@@ -321,13 +364,17 @@ export const useSnappLogic = () => {
   };
 
   const confirmBooking = async (count: number = 1) => {
-    if (!selectedBus) return;
+    if (!selectedBus || purchaseBusy.current) return;
 
     if (!userProfile?.studentId) {
         showToast('خطا در احراز هویت. لطفا مجدد وارد شوید.', 'error');
         return;
     }
 
+    purchaseBusy.current = true; setBookingPending(true);
+    const generation = sessionGeneration.current;
+    const signature = JSON.stringify([selectedBus.id, origin, destination, count]);
+    if (purchaseRequest.current?.signature !== signature) purchaseRequest.current = { signature, key: crypto.randomUUID() };
     try {
       const result = await reserveTicket({
         student_id: userProfile.studentId,
@@ -336,11 +383,12 @@ export const useSnappLogic = () => {
         destination_station_id: destination,
         departure_time: selectedBus.departureTime,
         seatCount: count
-      });
+      }, purchaseRequest.current.key);
+      if (generation !== sessionGeneration.current) return;
 
       const updatedProfile = { ...userProfile, balance: formatBalance(result.balance) };
       setUserProfile(updatedProfile);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedProfile));
+      persistProfile(updatedProfile);
 
       if (result?.transaction) setTransactions((prev) => [result.transaction, ...prev]);
       
@@ -351,11 +399,14 @@ export const useSnappLogic = () => {
           setTickets((prev) => [result.ticket, ...prev]);
       }
 
+      setIssuedTicket(result.ticket || result.tickets?.[0] || null);
+      purchaseRequest.current = null;
       setBookingStage(BookingStage.TICKET_VIEW);
       showToast(`${count} بلیط با موفقیت رزرو شد`, 'success');
     } catch (error: any) {
+      if (generation !== sessionGeneration.current) return;
       showToast(error?.message || 'رزرو بلیط انجام نشد', 'error');
-    }
+    } finally { if (generation === sessionGeneration.current) { purchaseBusy.current = false; setBookingPending(false); } }
   };
 
   const resetBooking = () => {
@@ -367,13 +418,16 @@ export const useSnappLogic = () => {
 
   const submitRating = async (rating: number, comment: string) => {
     if (!ratingTicketId) return;
+    const generation = sessionGeneration.current;
     try {
       const updated = await submitTicketFeedback(ratingTicketId, { rating, comment });
+      if (generation !== sessionGeneration.current) return;
       setTickets((prev) => prev.map((ticket) => (ticket.id === ratingTicketId ? { ...ticket, ...updated.ticket } : ticket)));
       setRatingTicketId(null);
       showToast('نظر شما ثبت شد', 'success');
       if (bookingStage === BookingStage.TICKET_VIEW) resetBooking();
     } catch (error: any) {
+      if (generation !== sessionGeneration.current) return;
       showToast(error?.message || 'ثبت نظر ناموفق بود', 'error');
     }
   };
@@ -381,18 +435,21 @@ export const useSnappLogic = () => {
   const cancelRating = () => setRatingTicketId(null);
 
   const sendMessage = async () => {
-    if (!inputMsg.trim()) return;
+    if (!inputMsg.trim() || isTyping) return;
+    const generation = sessionGeneration.current;
     const outgoing: ChatMessage = { role: 'user', text: inputMsg };
     setMessages((prev) => [...prev, outgoing]);
     setInputMsg('');
     setIsTyping(true);
 
-    // AI Logic removed. Replaced with static response.
-    setTimeout(() => {
-        const reply = "پیام شما در سیستم ثبت شد. همکاران پشتیبانی به زودی پاسخ خواهند داد.";
-        setMessages((prev) => [...prev, { role: 'model', text: reply }]);
-        setIsTyping(false);
-    }, 1000);
+    try {
+      const reply = await chatWithSupport(messages.map(item => item.text), outgoing.text);
+      if (generation !== sessionGeneration.current) return;
+      setMessages(prev => [...prev, { role: 'model', text: reply }]);
+    } catch {
+      if (generation !== sessionGeneration.current) return;
+      setMessages(prev => [...prev, { role: 'model', text: 'ارتباط برقرار نشد. برای پیگیری، از بخش پشتیبانی تیکت ثبت کنید.' }]);
+    } finally { if (generation === sessionGeneration.current) setIsTyping(false); }
   };
 
   const locateUser = () => mapRef.current?.locateUser();
@@ -402,6 +459,8 @@ export const useSnappLogic = () => {
       authStage,
       view,
       bookingStage,
+      bookingPending,
+      issuedTicket,
       origin,
       destination,
       busOptions,

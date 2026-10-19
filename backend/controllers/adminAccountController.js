@@ -1,3 +1,4 @@
+import { logError } from '../logging.js';
 import { db } from '../db.js';
 import { auditLog, hashPassword } from '../security.js';
 import { rejectUnexpectedFields, sanitizeText } from '../validation.js';
@@ -24,7 +25,7 @@ export const handleListAnalysts = async (_req, res) => {
     );
     res.json(rows.map(mapAccount));
   } catch (error) {
-    console.error('List analysts failed:', error);
+    logError('List analysts failed:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -54,14 +55,14 @@ export const handleCreateAnalyst = async (req, res) => {
     res.status(201).json(mapAccount(rows[0]));
   } catch (error) {
     if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'DUPLICATE_DRIVER' });
-    console.error('Create analyst failed:', error);
+    logError('Create analyst failed:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleUpdateAnalyst = async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'INVALID_ID' });
+  if ((!Number.isSafeInteger(id) || id <= 0)) return res.status(400).json({ error: 'INVALID_ID' });
   const unexpected = rejectUnexpectedFields(req.body, ['username', 'role']);
   if (!unexpected.ok) return res.status(400).json({ error: unexpected.error, fields: unexpected.fields });
   const username = sanitizeText(req.body.username, 50);
@@ -77,28 +78,28 @@ export const handleUpdateAnalyst = async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'DUPLICATE_DRIVER' });
-    console.error('Update analyst failed:', error);
+    logError('Update analyst failed:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleToggleAnalystStatus = async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'INVALID_ID' });
+  if ((!Number.isSafeInteger(id) || id <= 0)) return res.status(400).json({ error: 'INVALID_ID' });
   try {
     await db.query(`UPDATE admin_accounts SET status = IF(status='active','inactive','active'), updated_by = ? WHERE id = ?`, [req.auth?.username || req.auth?.sub || 'admin', id]);
     const [rows] = await db.query('SELECT status FROM admin_accounts WHERE id = ? LIMIT 1', [id]);
     await auditLog(db, req, 'admin.account_toggle_status', 'admin_account', id, { newStatus: rows[0]?.status });
     res.json({ success: true, newStatus: rows[0]?.status });
   } catch (error) {
-    console.error('Toggle analyst status failed:', error);
+    logError('Toggle analyst status failed:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleResetAnalystPassword = async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'INVALID_ID' });
+  if ((!Number.isSafeInteger(id) || id <= 0)) return res.status(400).json({ error: 'INVALID_ID' });
   const unexpected = rejectUnexpectedFields(req.body, ['password']);
   if (!unexpected.ok) return res.status(400).json({ error: unexpected.error, fields: unexpected.fields });
   const password = String(req.body.password || '');
@@ -109,14 +110,14 @@ export const handleResetAnalystPassword = async (req, res) => {
     await auditLog(db, req, 'admin.account_reset_password', 'admin_account', id);
     res.json({ success: true });
   } catch (error) {
-    console.error('Reset analyst password failed:', error);
+    logError('Reset analyst password failed:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleAnalystLoginLogs = async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'INVALID_ID' });
+  if ((!Number.isSafeInteger(id) || id <= 0)) return res.status(400).json({ error: 'INVALID_ID' });
   try {
     const [accounts] = await db.query('SELECT username FROM admin_accounts WHERE id = ? LIMIT 1', [id]);
     if (!accounts || accounts.length === 0) return res.status(404).json({ error: 'USER_NOT_FOUND' });
@@ -131,7 +132,7 @@ export const handleAnalystLoginLogs = async (req, res) => {
     );
     res.json(rows);
   } catch (error) {
-    console.error('Get analyst login logs failed:', error);
+    logError('Get analyst login logs failed:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };

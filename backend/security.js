@@ -1,9 +1,7 @@
 import { t } from './i18n.js';
 import crypto from 'crypto';
 
-const DEFAULT_TOKEN_TTL_SECONDS = Number(process.env.ACCESS_TOKEN_TTL_SECONDS || 60 * 60 * 8);
-const USER_DRIVER_TOKEN_TTL_SECONDS = Number(process.env.USER_DRIVER_ACCESS_TOKEN_TTL_SECONDS || 60 * 60 * 24 * 30);
-const MAX_BODY_STRING_LENGTH = 6_000_000;
+const MAX_BODY_STRING_LENGTH = 7_000_100;
 
 const base64Url = (input) => Buffer.from(input).toString('base64url');
 
@@ -17,6 +15,8 @@ const sign = (value) => crypto.createHmac('sha256', getSecret()).update(value).d
 
 export const issueAuthToken = (payload) => {
   const now = Math.floor(Date.now() / 1000);
+  const DEFAULT_TOKEN_TTL_SECONDS = Number(process.env.ACCESS_TOKEN_TTL_SECONDS || 60 * 60 * 8);
+  const USER_DRIVER_TOKEN_TTL_SECONDS = Number(process.env.USER_DRIVER_ACCESS_TOKEN_TTL_SECONDS || 60 * 60 * 24 * 30);
   const ttlSeconds = payload?.role === 'user' || payload?.role === 'driver'
     ? USER_DRIVER_TOKEN_TTL_SECONDS
     : DEFAULT_TOKEN_TTL_SECONDS;
@@ -43,7 +43,8 @@ export const verifyAuthToken = (token) => {
 
   try {
     const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    if (!decoded.exp || decoded.exp < Math.floor(Date.now() / 1000)) return null;
+    const parsedHeader = JSON.parse(Buffer.from(header, 'base64url').toString('utf8'));
+    if (parsedHeader.alg !== 'HS256' || parsedHeader.typ !== 'JWT' || !Number.isFinite(decoded.exp) || decoded.exp <= Math.floor(Date.now() / 1000)) return null;
     return decoded;
   } catch {
     return null;
@@ -53,7 +54,7 @@ export const verifyAuthToken = (token) => {
 export const authenticate = (req, res, next) => {
   const authHeader = req.get('authorization') || '';
   const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  const token = bearer || req.get('x-vira-session') || req.body?.authToken || req.query?.authToken;
+  const token = bearer || req.get('x-vira-session');
   const session = verifyAuthToken(token);
 
   if (!session) {
@@ -121,6 +122,7 @@ export const securityHeaders = (_req, res, next) => {
 
 export const createRateLimiter = ({ windowMs, max, keyPrefix = 'default', keyResolver }) => {
   const hits = new Map();
+  let lastCleanup = 0;
   return (req, res, next) => {
     let keySource = '';
     if (typeof keyResolver === 'function') {
@@ -133,6 +135,11 @@ export const createRateLimiter = ({ windowMs, max, keyPrefix = 'default', keyRes
     if (!keySource) keySource = req.ip || req.socket?.remoteAddress || 'unknown';
     const key = `${keyPrefix}:${keySource}`;
     const now = Date.now();
+    if (now - lastCleanup >= Math.min(windowMs, 60_000)) {
+      for (const [oldKey, value] of hits) if (value.resetAt <= now) hits.delete(oldKey);
+      lastCleanup = now;
+    }
+    if (!hits.has(key) && hits.size >= 20_000) return res.status(429).json({ error: t('TOO_MANY_REQUESTS'), code: 'TOO_MANY_REQUESTS' });
     const current = hits.get(key) || { count: 0, resetAt: now + windowMs };
     if (current.resetAt <= now) {
       current.count = 0;
@@ -141,6 +148,7 @@ export const createRateLimiter = ({ windowMs, max, keyPrefix = 'default', keyRes
     current.count += 1;
     hits.set(key, current);
     if (current.count > max) {
+      res.setHeader('Retry-After', String(Math.ceil((current.resetAt - now) / 1000)));
       return res.status(429).json({ error: t('TOO_MANY_REQUESTS'), code: 'TOO_MANY_REQUESTS' });
     }
     next();
@@ -148,15 +156,16 @@ export const createRateLimiter = ({ windowMs, max, keyPrefix = 'default', keyRes
 };
 
 export const validateBodySize = (req, res, next) => {
-  const hasOversizedString = (value) => {
-    if (typeof value === 'string') return value.length > MAX_BODY_STRING_LENGTH;
-    if (Array.isArray(value)) return value.some(hasOversizedString);
-    if (value && typeof value === 'object') return Object.values(value).some(hasOversizedString);
-    return false;
-  };
-
-  if (hasOversizedString(req.body)) {
-    return res.status(413).json({ error: t('PAYLOAD_TOO_LARGE'), code: 'PAYLOAD_TOO_LARGE' });
+  const stack = [{ value: req.body, depth: 0 }];
+  let nodes = 0;
+  while (stack.length) {
+    const { value, depth } = stack.pop();
+    if (++nodes > 10_000 || depth > 32 || (typeof value === 'string' && value.length > MAX_BODY_STRING_LENGTH)) {
+      return res.status(413).json({ error: t('PAYLOAD_TOO_LARGE'), code: 'PAYLOAD_TOO_LARGE' });
+    }
+    if (value && typeof value === 'object') {
+      for (const item of Object.values(value)) stack.push({ value: item, depth: depth + 1 });
+    }
   }
   next();
 };
@@ -180,6 +189,6 @@ export const auditLog = async (db, req, action, entityType, entityId = null, det
       ]
     );
   } catch (error) {
-    console.warn('Audit log failed:', error.message);
+    console.warn('Audit log failed:', error.code || 'AUDIT_WRITE_FAILED');
   }
 };

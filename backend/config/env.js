@@ -17,7 +17,7 @@ const getBackendNodeEnv = () => {
 };
 
 export const loadBackendEnv = () => {
-  if (envLoaded) return;
+  if (envLoaded || (process.env.NODE_ENV === 'test' && process.env.VIRA_TEST_DB_URL)) return;
   // Single source of truth: load env files from project root.
   loadIfExists(path.resolve(projectRoot, '.env'));
   // Fallback for cPanel/backend-only deployments.
@@ -29,7 +29,7 @@ export const loadBackendEnv = () => {
 
 const isWeakPlaceholder = (value) => {
   const v = String(value || '').trim().toLowerCase();
-  if (!v) return true;
+  if (!v || /^(replace[_-]|change[_-]?me)/.test(v)) return true;
   return [
     'secret',
     'changeme',

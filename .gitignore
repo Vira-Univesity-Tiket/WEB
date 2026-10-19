@@ -9,3 +9,12 @@ dist/
 backend/.env
 backend/.env.*
 !backend/.env.example
+
+# Private runtime data and generated validation artifacts
+**/*.log
+backend/storage/*
+!backend/storage/.htaccess
+backend/tmp/
+/storage/
+test-results/
+playwright-report/

@@ -1,3 +1,4 @@
+import { logError } from '../logging.js';
 import { db } from '../db.js';
 import { auditLog } from '../security.js';
 import { parsePositiveInt, parseTime } from '../validation.js';
@@ -25,7 +26,7 @@ const mapRequest = (row) => ({
 
 export const handleDriverCreateRouteRequest = async (req, res) => {
   const driverId = Number(req.auth?.driverId);
-  if (!Number.isFinite(driverId)) return res.status(400).json({ error: 'Invalid driver id' });
+  if ((!Number.isSafeInteger(driverId) || driverId <= 0)) return res.status(400).json({ error: 'Invalid driver id' });
 
   const originValidation = parsePositiveInt(req.body?.originStationId, { error: 'INVALID_STATION_IDS' });
   const destValidation = parsePositiveInt(req.body?.destinationStationId, { error: 'INVALID_STATION_IDS' });
@@ -79,7 +80,7 @@ export const handleDriverCreateRouteRequest = async (req, res) => {
       [driverId, originValidation.value, destValidation.value, timeValidation.value, rialPrice, JSON.stringify(stationIds)]
     );
     await connection.commit();
-    await auditLog(db, req, 'driver.route_request_create', 'driver_route_request', result.insertId, {
+    await auditLog(connection, req, 'driver.route_request_create', 'driver_route_request', result.insertId, {
       originStationId: originValidation.value,
       destinationStationId: destValidation.value,
       departureTime: timeValidation.value,
@@ -88,7 +89,7 @@ export const handleDriverCreateRouteRequest = async (req, res) => {
     res.status(201).json({ success: true, id: result.insertId.toString() });
   } catch (error) {
     await connection.rollback();
-    console.error('Create route request error:', error);
+    logError('Create route request error:', error);
     res.status(500).json({ error: 'Server error' });
   } finally {
     connection.release();
@@ -97,7 +98,7 @@ export const handleDriverCreateRouteRequest = async (req, res) => {
 
 export const handleDriverListRouteRequests = async (req, res) => {
   const driverId = Number(req.auth?.driverId);
-  if (!Number.isFinite(driverId)) return res.status(400).json({ error: 'Invalid driver id' });
+  if ((!Number.isSafeInteger(driverId) || driverId <= 0)) return res.status(400).json({ error: 'Invalid driver id' });
   const [rows] = await db.query(
     `SELECT r.*, d.name AS driver_name, d.license_plate,
             o.name AS origin_name, ds.name AS destination_name
@@ -134,7 +135,7 @@ export const handleAdminListRouteRequests = async (req, res) => {
 
 export const handleAdminApproveRouteRequest = async (req, res) => {
   const requestId = Number(req.params.requestId);
-  if (!Number.isFinite(requestId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(requestId) || requestId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
 
   const originValidation = parsePositiveInt(req.body?.originStationId, { error: 'INVALID_STATION_IDS' });
   const destValidation = parsePositiveInt(req.body?.destinationStationId, { error: 'INVALID_STATION_IDS' });
@@ -184,7 +185,7 @@ export const handleAdminApproveRouteRequest = async (req, res) => {
     );
 
     await connection.commit();
-    await auditLog(db, req, 'admin.route_request_approve', 'driver_route_request', requestId, {
+    await auditLog(connection, req, 'admin.route_request_approve', 'driver_route_request', requestId, {
       scheduleId,
       driverId: driverValidation.value,
       originStationId: originValidation.value,
@@ -196,7 +197,7 @@ export const handleAdminApproveRouteRequest = async (req, res) => {
     res.json({ success: true, scheduleId: scheduleId.toString() });
   } catch (error) {
     await connection.rollback();
-    console.error('Approve route request error:', error);
+    logError('Approve route request error:', error);
     res.status(500).json({ error: 'Server error' });
   } finally {
     connection.release();
@@ -205,7 +206,7 @@ export const handleAdminApproveRouteRequest = async (req, res) => {
 
 export const handleAdminRejectRouteRequest = async (req, res) => {
   const requestId = Number(req.params.requestId);
-  if (!Number.isFinite(requestId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(requestId) || requestId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
   const adminNote = String(req.body?.adminNote || '').slice(0, 255);
 
   const connection = await db.getConnection();
@@ -217,11 +218,11 @@ export const handleAdminRejectRouteRequest = async (req, res) => {
 
     await connection.query(`UPDATE driver_route_requests SET status='rejected', admin_note=? WHERE id=?`, [adminNote || null, requestId]);
     await connection.commit();
-    await auditLog(db, req, 'admin.route_request_reject', 'driver_route_request', requestId, { adminNote });
+    await auditLog(connection, req, 'admin.route_request_reject', 'driver_route_request', requestId, { adminNote });
     res.json({ success: true });
   } catch (error) {
     await connection.rollback();
-    console.error('Reject route request error:', error);
+    logError('Reject route request error:', error);
     res.status(500).json({ error: 'Server error' });
   } finally {
     connection.release();

@@ -1,3 +1,4 @@
+import { logError } from '../logging.js';
 
 import { db } from '../db.js';
 import { auditLog, isSafeText } from '../security.js';
@@ -28,7 +29,7 @@ export const handleGetActiveNotification = async (req, res) => {
     if (rows.length === 0) return res.json(null);
     res.json(mapNotification(rows[0]));
   } catch (error) {
-    console.error('Get Active Notification Error:', error);
+    logError('Get Active Notification Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -39,7 +40,7 @@ export const handleGetNotifications = async (req, res) => {
     const [rows] = await db.query("SELECT * FROM notifications ORDER BY created_at DESC");
     res.json(rows.map(mapNotification));
   } catch (error) {
-    console.error('Get All Notifications Error:', error);
+    logError('Get All Notifications Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -65,7 +66,7 @@ export const handleCreateNotification = async (req, res) => {
     await auditLog(db, req, 'admin.notification_create', 'notification', result.insertId);
     res.status(201).json(mapNotification(rows[0]));
   } catch (error) {
-    console.error('Create Notification Error:', error);
+    logError('Create Notification Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -92,7 +93,7 @@ export const handleUpdateNotification = async (req, res) => {
     await auditLog(db, req, 'admin.notification_update', 'notification', id);
     res.json({ success: true });
   } catch (error) {
-    console.error('Update Notification Error:', error);
+    logError('Update Notification Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -111,7 +112,7 @@ export const handleToggleNotificationStatus = async (req, res) => {
     await auditLog(db, req, 'admin.notification_toggle_status', 'notification', id, { newStatus: rows[0]?.status });
     res.json({ success: true, newStatus: rows[0]?.status });
   } catch (error) {
-    console.error('Toggle Notification Error:', error);
+    logError('Toggle Notification Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -126,7 +127,7 @@ export const handleDeleteNotification = async (req, res) => {
     await auditLog(db, req, 'admin.notification_delete', 'notification', id);
     res.json({ success: true });
   } catch (error) {
-    console.error('Delete Notification Error:', error);
+    logError('Delete Notification Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };

@@ -83,6 +83,8 @@ export interface Ticket {
   status: 'active' | 'expired' | 'cancelled';
   qrCode: string;
   validationCode?: string;
+  boardedAt?: string | null;
+  passengerCount?: number;
   feedbackRating?: number | null;
   feedbackComment?: string;
   feedbackStatus?: 'pending' | 'reviewing' | 'resolved';

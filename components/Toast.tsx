@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Icons } from './Icons';
 
 interface ToastProps {
@@ -13,28 +13,31 @@ interface ToastProps {
 const Toast: React.FC<ToastProps> = ({ message, type, visible, onClose, duration = 3000 }) => {
   const [show, setShow] = useState(false);
 
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (visible) {
       setShow(true);
+      let fadeTimer: ReturnType<typeof setTimeout>;
       const timer = setTimeout(() => {
         setShow(false);
         // Wait for animation to finish before calling onClose
-        setTimeout(onClose, 300); 
+        fadeTimer = setTimeout(() => closeRef.current(), 300);
       }, duration);
-      return () => clearTimeout(timer);
+      return () => { clearTimeout(timer); clearTimeout(fadeTimer); };
     } else {
       setShow(false);
     }
-  }, [visible, onClose, duration]);
+  }, [visible, message, type, duration]);
 
   if (!visible && !show) return null;
 
   const getStyles = () => {
     switch (type) {
       case 'success':
-        return 'bg-green-600 text-white shadow-green-200/50';
+        return 'bg-green-700 text-white shadow-green-200/50';
       case 'error':
-        return 'bg-red-500 text-white shadow-red-200/50';
+        return 'bg-red-700 text-white shadow-red-200/50';
       default:
         return 'bg-gray-800 text-white shadow-gray-200/50';
     }
@@ -58,7 +61,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, visible, onClose, duration
         <div className="shrink-0">
             {getIcon()}
         </div>
-        <p className="text-sm font-bold flex-1 text-right">{message}</p>
+        <p role={type === 'error' ? 'alert' : 'status'} aria-live={type === 'error' ? 'assertive' : 'polite'} className="text-sm font-bold flex-1 text-right">{message}</p>
       </div>
     </div>
   );

@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS schedules (
 CREATE TABLE IF NOT EXISTS buses (
   id INT NOT NULL AUTO_INCREMENT,
   schedule_id INT DEFAULT NULL,
+  driver_id INT DEFAULT NULL,
   origin_station_id INT DEFAULT NULL,
   destination_station_id INT DEFAULT NULL,
   bus_number VARCHAR(80) NOT NULL,
@@ -98,6 +99,7 @@ CREATE TABLE IF NOT EXISTS buses (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_buses_schedule (schedule_id),
+  KEY idx_buses_driver (driver_id),
   KEY idx_buses_origin_station (origin_station_id),
   KEY idx_buses_destination_station (destination_station_id),
   CONSTRAINT fk_buses_schedule FOREIGN KEY (schedule_id) REFERENCES schedules(id),
@@ -116,7 +118,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   validation_code CHAR(4) NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_tickets_qr (qr_code),
+  KEY idx_tickets_qr (qr_code),
   KEY idx_tickets_validation_code (validation_code),
   KEY idx_tickets_user (user_id),
   KEY idx_tickets_bus (bus_id),
@@ -277,50 +279,26 @@ CREATE TABLE IF NOT EXISTS user_notifications (
   CONSTRAINT fk_user_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO stations (name, lat, lng)
-SELECT * FROM (
-  SELECT 'دانشکده فنی' AS name, 35.7135000 AS lat, 51.3930000 AS lng UNION ALL
-  SELECT 'خوابگاه مرکزی', 35.7150000, 51.3880000 UNION ALL
-  SELECT 'سلف سرویس', 35.7120000, 51.3890000
-) AS x
-WHERE NOT EXISTS (SELECT 1 FROM stations LIMIT 1);
+CREATE TABLE IF NOT EXISTS ticket_feedback (
+  ticket_id INT NOT NULL,
+  rating TINYINT NOT NULL,
+  comment VARCHAR(2000) NOT NULL DEFAULT '',
+  status ENUM('pending','reviewing','resolved') NOT NULL DEFAULT 'pending',
+  review_note VARCHAR(2000) NOT NULL DEFAULT '',
+  reviewed_by VARCHAR(50) DEFAULT NULL,
+  reviewed_at TIMESTAMP NULL DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (ticket_id),
+  KEY idx_feedback_status (status, created_at),
+  CONSTRAINT fk_feedback_ticket FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Seed existing active drivers
-INSERT INTO drivers (name, username, password, license_plate, phone, status, capacity)
-SELECT * FROM (
-  SELECT 'راننده نمونه 1' AS name, 'driver1' AS username, CONCAT('seed-disabled-', UUID()) AS password, '11-الف-111' AS license_plate, '09120000001' AS phone, 'active' AS status, 40 AS capacity UNION ALL
-  SELECT 'راننده نمونه 2', 'driver2', CONCAT('seed-disabled-', UUID()), '22-ب-222', '09120000002', 'active', 25
-) AS x
-WHERE NOT EXISTS (SELECT 1 FROM drivers LIMIT 1);
-
-INSERT INTO users (name, student_id, national_code, balance, province, city, language)
-SELECT * FROM (
-  SELECT 'دانشجو نمونه' AS name, '402118901' AS student_id, '1234567891' AS national_code, 1500000 AS balance, 'تهران' AS province, 'تهران' AS city, 'fa' AS language
-) AS x
-WHERE NOT EXISTS (SELECT 1 FROM users LIMIT 1);
-
-INSERT IGNORE INTO driver_station_assignments (driver_id, station_id)
-SELECT d.id, s.id
-FROM drivers d
-JOIN stations s
-WHERE d.license_plate = '11-الف-111' AND s.name IN ('دانشکده فنی', 'خوابگاه مرکزی');
-
-INSERT IGNORE INTO driver_station_assignments (driver_id, station_id)
-SELECT d.id, s.id
-FROM drivers d
-JOIN stations s
-WHERE d.license_plate = '22-ب-222' AND s.name IN ('خوابگاه مرکزی', 'سلف سرویس');
-
-INSERT INTO schedules (driver_id, origin_station_id, destination_station_id, departure_time, price, status)
-SELECT d.id, s1.id, s2.id, '08:30:00', 50000, 'active'
-FROM drivers d
-JOIN stations s1 ON s1.name = 'دانشکده فنی'
-JOIN stations s2 ON s2.name = 'خوابگاه مرکزی'
-WHERE d.license_plate = '11-الف-111'
-  AND NOT EXISTS (
-    SELECT 1 FROM schedules sc
-    WHERE sc.driver_id = d.id
-      AND sc.origin_station_id = s1.id
-      AND sc.destination_station_id = s2.id
-      AND sc.departure_time = '08:30:00'
-  );
+CREATE TABLE IF NOT EXISTS ticket_purchase_requests (
+  user_id INT NOT NULL,
+  request_key VARCHAR(80) CHARACTER SET ascii NOT NULL,
+  payload_hash CHAR(64) CHARACTER SET ascii NOT NULL,
+  response JSON NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, request_key),
+  CONSTRAINT fk_purchase_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

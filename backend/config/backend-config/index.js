@@ -89,7 +89,7 @@ const buildCorsConfig = (env, runtime) => {
     : ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
   const allowedHeaders = asList(env.CORS_ALLOWED_HEADERS).length
     ? asList(env.CORS_ALLOWED_HEADERS)
-    : ['Content-Type', 'Authorization', 'X-Vira-Session'];
+    : ['Content-Type', 'Authorization', 'X-Vira-Session', 'Idempotency-Key'];
 
   return {
     credentials: toBool(env.CORS_ALLOW_CREDENTIALS, true),

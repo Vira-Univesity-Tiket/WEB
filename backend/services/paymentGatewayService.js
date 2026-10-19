@@ -1,9 +1,9 @@
 import crypto from 'crypto';
 import { loadBackendConfig } from '../config/backend-config/index.js';
 
-const DEFAULT_REQUEST_URL = 'https://api.zarinpal.com/pg/v4/payment/request.json';
-const DEFAULT_VERIFY_URL = 'https://api.zarinpal.com/pg/v4/payment/verify.json';
-const DEFAULT_STARTPAY_URL = 'https://www.zarinpal.com/pg/StartPay/';
+const DEFAULT_REQUEST_URL = 'https://payment.zarinpal.com/pg/v4/payment/request.json';
+const DEFAULT_VERIFY_URL = 'https://payment.zarinpal.com/pg/v4/payment/verify.json';
+const DEFAULT_STARTPAY_URL = 'https://payment.zarinpal.com/pg/StartPay/';
 const DEFAULT_SANDBOX_REQUEST_URL = 'https://sandbox.zarinpal.com/pg/rest/WebGate/PaymentRequest.json';
 const DEFAULT_SANDBOX_VERIFY_URL = 'https://sandbox.zarinpal.com/pg/rest/WebGate/PaymentVerification.json';
 const DEFAULT_SANDBOX_STARTPAY_URL = 'https://sandbox.zarinpal.com/pg/StartPay/';
@@ -102,7 +102,8 @@ const postJson = async (url, payload) => {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15_000)
   });
   const body = await asJson(response);
   return { ok: response.ok, status: response.status, body };
@@ -165,8 +166,8 @@ export const verifyZarinpalPayment = async ({ amountRial, authority }) => {
   const code = Number(result.body?.data?.code ?? result.body?.Status ?? result.body?.status);
   const refId = String(result.body?.data?.ref_id || result.body?.RefID || result.body?.ref_id || '').trim();
   const message = String(result.body?.data?.message || result.body?.errors?.message || result.body?.message || '');
-  const gatewayTransactionId = String(result.body?.data?.card_pan || result.body?.data?.transaction_id || '').trim();
-  const success = code === 100 || code === 101;
+  const gatewayTransactionId = String(result.body?.data?.transaction_id || refId || '').trim();
+  const success = result.ok && (code === 100 || code === 101) && Boolean(refId);
 
   return {
     success,

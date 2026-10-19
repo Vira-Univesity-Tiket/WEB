@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Icons } from '../components/Icons';
 import { Transaction, UserProfile } from '../types';
-import { getWalletTransactions, getWalletTopupStatus, initiateTopupWallet, loginAPI } from '../services/apiService';
+import { getWalletTransactions, getWalletTopupStatus, initiateTopupWallet, getCurrentUserAPI } from '../services/apiService';
 import { addCommas, amountToPersianWordsToman, formatAmountFa, removeCommas, toEnglishDigits } from '../utils/numberUtils';
 
 interface WalletViewProps {
@@ -38,7 +38,9 @@ const WalletView: React.FC<WalletViewProps> = ({ userProfile, onBack, transactio
     const statusFromUrl = url.searchParams.get('topupStatus');
     if (!txId) return;
 
+    let active = true;
     const cleanUrl = () => {
+      if (!active) return;
       url.searchParams.delete('topupTransactionId');
       url.searchParams.delete('topupStatus');
       url.searchParams.delete('topupReferenceId');
@@ -49,6 +51,7 @@ const WalletView: React.FC<WalletViewProps> = ({ userProfile, onBack, transactio
     const handleResolvedStatus = async () => {
       try {
         const statusData = await getWalletTopupStatus(txId);
+        if (!active) return;
         if (statusData.status === 'success') {
           showToast(statusData.message || 'پرداخت با موفقیت تایید شد', 'success');
           await refreshWallet();
@@ -61,7 +64,9 @@ const WalletView: React.FC<WalletViewProps> = ({ userProfile, onBack, transactio
           const maxMs = 40_000;
           while (Date.now() - started < maxMs) {
             await new Promise((resolve) => setTimeout(resolve, 2500));
+            if (!active) return;
             const next = await getWalletTopupStatus(txId);
+            if (!active) return;
             if (next.status !== 'pending') {
               setTopupPolling(false);
               showToast(next.message || (next.status === 'success' ? 'پرداخت تایید شد' : 'پرداخت ناموفق بود'), next.status === 'success' ? 'success' : 'error');
@@ -79,16 +84,13 @@ const WalletView: React.FC<WalletViewProps> = ({ userProfile, onBack, transactio
         showToast(statusData.message || 'پرداخت ناموفق بود', 'error');
         cleanUrl();
       } catch (error: any) {
-        showToast(error?.message || 'خطا در دریافت وضعیت پرداخت', 'error');
+        if (active) showToast(error?.message || 'خطا در دریافت وضعیت پرداخت', 'error');
         cleanUrl();
       }
     };
 
-    if (statusFromUrl === 'success') {
-      handleResolvedStatus();
-      return;
-    }
-    handleResolvedStatus();
+    void handleResolvedStatus();
+    return () => { active = false; };
   }, []);
 
   const balanceDisplay = liveBalance;
@@ -97,7 +99,7 @@ const WalletView: React.FC<WalletViewProps> = ({ userProfile, onBack, transactio
     setIsRefreshing(true);
     try {
       const [profile, txs] = await Promise.all([
-        loginAPI(userProfile.studentId, userProfile.nationalCode),
+        getCurrentUserAPI(),
         getWalletTransactions(userProfile.studentId)
       ]);
       setLiveBalance(profile.balance);
@@ -144,12 +146,12 @@ const WalletView: React.FC<WalletViewProps> = ({ userProfile, onBack, transactio
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 p-4 flex items-center justify-between shadow-sm sticky top-0 z-10 border-b dark:border-slate-800 flex-none">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
+          <button aria-label="بازگشت به خانه" onClick={onBack} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
             <Icons.ArrowRight size={24} className="text-gray-700 dark:text-gray-200" />
           </button>
           <h2 className="text-lg font-bold text-gray-800 dark:text-white">کیف پول</h2>
         </div>
-        <button onClick={refreshWallet} className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors ${isRefreshing ? 'animate-spin' : ''}`}>
+        <button aria-label="بروزرسانی کیف پول" onClick={refreshWallet} className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors ${isRefreshing ? 'animate-spin' : ''}`}>
            <Icons.Activity size={20} className="text-gray-700 dark:text-gray-200" />
         </button>
       </div>
@@ -186,7 +188,7 @@ const WalletView: React.FC<WalletViewProps> = ({ userProfile, onBack, transactio
          <div className="space-y-3 pb-10">
             {liveTransactions.length === 0 ? (
                <div className="text-center py-10 bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800">
-                  <div className="w-12 h-12 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-400">
+                  <div className="w-12 h-12 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-600 dark:text-gray-400">
                      <Icons.Wallet size={24} />
                   </div>
                   <p className="text-sm text-gray-500 dark:text-gray-400">هنوز تراکنشی ثبت نشده است</p>
@@ -200,19 +202,19 @@ const WalletView: React.FC<WalletViewProps> = ({ userProfile, onBack, transactio
                   >
                      <div className="flex justify-between items-center">
                         <div className="flex items-center gap-3">
-                           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${tx.type === 'deposit' ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400'}`}>
+                           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${tx.type === 'deposit' ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 dark:text-red-400'}`}>
                               {tx.type === 'deposit' ? <Icons.ArrowDownLeft size={20} /> : <Icons.ArrowUpRight size={20} />}
                            </div>
                            <div>
                               <div className="font-bold text-sm text-gray-800 dark:text-white">{tx.title}</div>
-                              <div className="text-[10px] text-gray-400 mt-1">{tx.date} | {tx.time}</div>
+                              <div className="text-[10px] text-gray-600 dark:text-gray-400 mt-1">{tx.date} | {tx.time}</div>
                            </div>
                         </div>
                         <div className="text-left">
                            <div className={`font-bold text-sm ${tx.type === 'deposit' ? 'text-green-600 dark:text-green-400' : 'text-gray-800 dark:text-white'}`}>
                               {tx.type === 'deposit' ? '+' : '-'}{formatAmountFa(tx.amount)}
                            </div>
-                           <div className="text-[10px] text-gray-400 mt-1">تومان</div>
+                           <div className="text-[10px] text-gray-600 dark:text-gray-400 mt-1">تومان</div>
                         </div>
                      </div>
                      
@@ -220,11 +222,11 @@ const WalletView: React.FC<WalletViewProps> = ({ userProfile, onBack, transactio
                      {expandedTxId === tx.id && (
                         <div className="mt-4 pt-4 border-t border-dashed border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-4 animate-in slide-in-from-top-2">
                            <div>
-                              <span className="block text-[10px] text-gray-400">کد پیگیری</span>
+                              <span className="block text-[10px] text-gray-600 dark:text-gray-400">کد پیگیری</span>
                               <span className="block text-xs font-bold text-gray-700 dark:text-gray-300 font-mono mt-1">{tx.trackingNumber}</span>
                            </div>
                            <div>
-                              <span className="block text-[10px] text-gray-400">وضعیت</span>
+                              <span className="block text-[10px] text-gray-600 dark:text-gray-400">وضعیت</span>
                               <span className="block text-xs font-bold text-green-600 dark:text-green-400 mt-1">موفق</span>
                            </div>
                         </div>
@@ -256,10 +258,10 @@ const WalletView: React.FC<WalletViewProps> = ({ userProfile, onBack, transactio
                            onChange={handleAmountChange}
                            autoFocus
                         />
-                        <span className="text-sm font-bold text-gray-400 whitespace-nowrap">تومان</span>
+                        <span className="text-sm font-bold text-gray-600 dark:text-gray-400 whitespace-nowrap">تومان</span>
                      </div>
                      {topUpAmount && (
-                        <span className="text-xs text-blue-500 font-bold mt-2">{amountToPersianWordsToman(topUpAmount)}</span>
+                        <span className="text-xs text-blue-700 dark:text-blue-300 font-bold mt-2">{amountToPersianWordsToman(topUpAmount)}</span>
                      )}
                   </div>
 

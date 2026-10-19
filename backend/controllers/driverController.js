@@ -1,209 +1,18 @@
+import { logError } from '../logging.js';
 
 import { db } from '../db.js';
 import { auditLog, hashPassword, issueAuthToken, verifyPassword } from '../security.js';
-import { sanitizeText, validateIranMobile, validateNationalCode } from '../validation.js';
+import { normalizeDigits, parsePositiveInt, sanitizeText, validateIranMobile, validateNationalCode } from '../validation.js';
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+import { mapScan, normalizeQrPayload, scanTicket, serviceDate } from '../services/ticketScanService.js';
+import { parseUpload } from '../services/uploadValidation.js';
 
-// Helper to get commission percentage
+const todayIso = serviceDate;
+
 async function getCommissionPercent() {
   const [rows] = await db.query("SELECT setting_value FROM settings WHERE setting_key = 'commission_percent' LIMIT 1");
-  return rows.length > 0 ? Number(rows[0].setting_value) : 10; // Default 10%
+  return rows.length > 0 ? Number(rows[0].setting_value) : 10;
 }
-
-const mapScan = (row, count = 1) => ({
-  id: row.id,
-  ticketId: row.ticket_id?.toString(),
-  qrCode: row.qr_code,
-  validationCode: row.validation_code,
-  passengerName: row.passenger_name,
-  amount: Math.round(Number(row.price_paid || 0) / 10), // Toman
-  scannedAt: row.scanned_at,
-  method: row.scan_method,
-  count: count // Add count to response for UI
-});
-
-const normalizeQrPayload = (input) => {
-  if (input === null || input === undefined) return '';
-  const normalizeDigits = (value) =>
-    String(value || '')
-      .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
-      .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632));
-
-  const raw = normalizeDigits(String(input).trim());
-  if (!raw) return '';
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (typeof parsed === 'string') return parsed.trim();
-    if (parsed && typeof parsed === 'object') {
-      const candidate =
-        parsed.qrCode ||
-        parsed.qr ||
-        parsed.validationCode ||
-        parsed.validation_code ||
-        parsed.code ||
-        parsed.value;
-      if (candidate) return normalizeDigits(String(candidate).trim());
-    }
-  } catch {}
-
-  const querySource = raw.includes('?') ? raw.slice(raw.indexOf('?') + 1) : raw;
-  if (querySource.includes('=')) {
-    try {
-      const params = new URLSearchParams(querySource);
-      const candidate =
-        params.get('qrCode') ||
-        params.get('qr') ||
-        params.get('validationCode') ||
-        params.get('validation_code') ||
-        params.get('code') ||
-        params.get('value');
-      if (candidate) return normalizeDigits(candidate.trim());
-    } catch {}
-  }
-
-  return normalizeDigits(raw);
-};
-
-const performScan = async ({ driverId, searchField, searchValue, scanMethod }) => {
-  const connection = await db.getConnection();
-  const serviceDate = todayIso();
-
-  try {
-    await connection.beginTransaction();
-
-    // 1. Get Scanning Driver Info
-    const [driverRows] = await connection.query(
-      'SELECT name, license_plate FROM drivers WHERE id = ? LIMIT 1',
-      [driverId]
-    );
-    
-    if (!driverRows.length) {
-        await connection.rollback();
-        return { status: 403, payload: { error: 'راننده شناسایی نشد' } };
-    }
-    const driver = driverRows[0];
-
-    const [driverStationRows] = await connection.query(
-      `SELECT station_id
-       FROM driver_station_assignments
-       WHERE driver_id = ?`,
-      [driverId]
-    );
-    const driverStationIds = driverStationRows
-      .map((row) => Number(row.station_id))
-      .filter((stationId) => Number.isFinite(stationId));
-
-    if (driverStationIds.length === 0) {
-      await connection.rollback();
-      return { status: 403, payload: { error: 'این راننده به هیچ ایستگاهی اختصاص داده نشده است' } };
-    }
-
-    // 2. Search for ALL Tickets matches
-    // Note: searchField is either 'qr_code' or 'validation_code'
-    const [candidates] = await connection.query(
-      `SELECT t.id, t.qr_code, t.validation_code, t.price_paid, t.status, u.name AS passenger_name,
-              b.bus_number,
-              COALESCE(b.origin_station_id, sc.origin_station_id) AS origin_station_id,
-              COALESCE(b.destination_station_id, sc.destination_station_id) AS destination_station_id
-       FROM tickets t
-       JOIN users u ON u.id = t.user_id
-       JOIN buses b ON b.id = t.bus_id
-       LEFT JOIN schedules sc ON sc.id = b.schedule_id
-       WHERE t.${searchField} = ?`,
-      [searchValue]
-    );
-
-    if (candidates.length === 0) {
-      await connection.rollback();
-      return { status: 404, payload: { error: 'کد بلیط یافت نشد' } };
-    }
-
-    // 3. Filter tickets that belong to a bus running at one of this driver's assigned stations
-    const myTickets = candidates.filter((ticket) => {
-      const ticketStationIds = [ticket.origin_station_id, ticket.destination_station_id]
-        .map((stationId) => Number(stationId))
-        .filter((stationId) => Number.isFinite(stationId));
-      return ticketStationIds.some((stationId) => driverStationIds.includes(stationId));
-    });
-
-    if (myTickets.length === 0) {
-      await connection.rollback();
-      return { status: 403, payload: { error: 'این بلیط برای ایستگاه تحت پوشش شما نیست' } };
-    }
-
-    // 4. Validate Status of ALL tickets
-    // If any are not active, it's a problem, but usually they should all be active or all used if scanned together.
-    const activeTickets = myTickets.filter(t => t.status === 'active');
-    
-    if (activeTickets.length === 0) {
-       await connection.rollback();
-       return { status: 400, payload: { error: 'این بلیط‌ها قبلا استفاده شده یا منقضی هستند' } };
-    }
-
-    // 5. Check duplicates in scans (Extra safety)
-    // Check if ANY of these ticket IDs are already in scans for today
-    const ticketIds = activeTickets.map(t => t.id);
-    if (ticketIds.length > 0) {
-        const placeholders = ticketIds.map(() => '?').join(',');
-        const [duplicateRows] = await connection.query(
-          `SELECT id FROM ticket_scans WHERE service_date = ? AND ticket_id IN (${placeholders}) LIMIT 1`,
-          [serviceDate, ...ticketIds]
-        );
-
-        if (duplicateRows.length > 0) {
-          await connection.rollback();
-          return { status: 409, payload: { error: 'این بلیط قبلاً اسکن شده است' } };
-        }
-    }
-
-    // 6. Record Scan for EACH active ticket
-    // We insert a scan record for every single ticket in the batch to keep accounting accurate per seat.
-    let lastInsertId = 0;
-    for (const ticket of activeTickets) {
-        const [insertResult] = await connection.query(
-          `INSERT INTO ticket_scans (ticket_id, driver_id, scan_method, scanned_value, passenger_count, service_date)
-           VALUES (?, ?, ?, ?, 1, ?)`,
-          [ticket.id, driverId, scanMethod, searchValue, serviceDate]
-        );
-        lastInsertId = insertResult.insertId;
-    }
-
-    await connection.commit();
-
-    // Get info of one of the scans to return to UI
-    const [newRows] = await connection.query(
-      `SELECT s.id, s.ticket_id, s.scan_method, s.scanned_at,
-              t.qr_code, t.validation_code, t.price_paid,
-              u.name AS passenger_name
-       FROM ticket_scans s
-       JOIN tickets t ON t.id = s.ticket_id
-       JOIN users u ON u.id = t.user_id
-       WHERE s.id = ? LIMIT 1`,
-      [lastInsertId]
-    );
-
-    const scanData = mapScan(newRows[0], activeTickets.length);
-    
-    // Customize passenger name if multiple
-    if (activeTickets.length > 1) {
-        scanData.passengerName = `${scanData.passengerName} (${activeTickets.length} نفر)`;
-    }
-
-    return { status: 201, payload: { success: true, scan: scanData } };
-
-  } catch (error) {
-    await connection.rollback();
-    if (error.code === 'ER_DUP_ENTRY') {
-        return { status: 409, payload: { error: 'این بلیط قبلاً ثبت شده است' } };
-    }
-    console.error('Scan Error:', error);
-    return { status: 500, payload: { error: 'خطای سرور' } };
-  } finally {
-    connection.release();
-  }
-};
 
 export const handleDriverRegister = async (req, res) => {
   const name = sanitizeText(req.body.name, 100);
@@ -235,6 +44,10 @@ export const handleDriverRegister = async (req, res) => {
   if (!documents || typeof documents !== 'object' || !documents.nationalCard || !documents.licenseCard || !documents.carCard) {
     return res.status(400).json({ error: 'بارگذاری کامل مدارک الزامی است.' });
   }
+  for (const key of ['nationalCard', 'licenseCard', 'carCard']) {
+    const file = parseUpload(documents[key], { maxBytes: 3 * 1024 * 1024, allowedMime: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'] });
+    if (!file.ok) return res.status(400).json({ error: file.error });
+  }
 
   // Safe License Plate Construction
   let licensePlate = '';
@@ -248,7 +61,7 @@ export const handleDriverRegister = async (req, res) => {
 
   try {
     const hashedPassword = await hashPassword(normalizedPassword);
-    const [existing] = await db.query('SELECT id, status FROM drivers WHERE username = ? OR national_code = ?', [normalizedUsername, nationalCode]);
+    const [existing] = await db.query('SELECT id, status, username, password FROM drivers WHERE username = ? OR national_code = ?', [normalizedUsername, nationalCode]);
     
     if (existing.length > 0) {
         const driver = existing[0];
@@ -256,6 +69,12 @@ export const handleDriverRegister = async (req, res) => {
         // If driver is already ACTIVE, block registration.
         if (driver.status === 'active') {
             return res.status(409).json({ error: 'حساب کاربری با این مشخصات قبلاً تایید و فعال شده است.' });
+        }
+
+        // Re-registration must prove ownership of the existing pending/rejected account.
+        if (!['pending', 'rejected'].includes(driver.status) || driver.username !== normalizedUsername ||
+            !(await verifyPassword(normalizedPassword, driver.password)).ok) {
+          return res.status(409).json({ error: 'برای ویرایش درخواست، اطلاعات ورود حساب قبلی را وارد کنید.' });
         }
 
         // If 'pending' or 'rejected', update the record and reset status to 'pending' for review.
@@ -277,7 +96,7 @@ export const handleDriverRegister = async (req, res) => {
     await auditLog(db, req, 'driver.register', 'driver', null, { username: normalizedUsername });
     res.json({ success: true });
   } catch (error) {
-    console.error('Driver Register Error', error);
+    logError('Driver Register Error', error);
     if (error?.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ error: 'نام کاربری یا کد ملی قبلاً ثبت شده است.' });
     }
@@ -353,15 +172,16 @@ export const handleDriverLogin = async (req, res) => {
       token
     });
   } catch (error) {
-    console.error('Driver login failed', error);
+    logError('Driver login failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleDriverScanByQr = async (req, res) => {
   const { driverId, qrCode } = req.body;
-  const numericDriverId = Number(driverId);
-  if (!Number.isFinite(numericDriverId) || !qrCode) {
+  const driverValidation = parsePositiveInt(driverId);
+  const numericDriverId = driverValidation.value;
+  if (!driverValidation.ok || !qrCode) {
     return res.status(400).json({ error: 'driverId and qrCode are required' });
   }
   if (req.auth?.driverId !== String(numericDriverId)) {
@@ -370,23 +190,24 @@ export const handleDriverScanByQr = async (req, res) => {
 
   // UPDATE: If scanned value is 4 digits, treat as validation code search
   const codeStr = normalizeQrPayload(qrCode);
-  const searchField = (codeStr.length === 4 && /^\d+$/.test(codeStr)) ? 'validation_code' : 'qr_code';
+  if (!codeStr) return res.status(400).json({ error: 'کد بلیط معتبر نیست.' });
 
   try {
-    const result = await performScan({ driverId: numericDriverId, searchField, searchValue: codeStr, scanMethod: 'qr' });
+    const result = await scanTicket(db, { driverId: numericDriverId, value: codeStr, method: 'qr' });
     res.status(result.status).json(result.payload);
   } catch (error) {
-    console.error('Driver QR scan failed', error);
+    logError('Driver QR scan failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleDriverScanByCode = async (req, res) => {
   const { driverId, code } = req.body;
-  const numericDriverId = Number(driverId);
-  const normalizedCode = String(code || '').trim();
+  const driverValidation = parsePositiveInt(driverId);
+  const numericDriverId = driverValidation.value;
+  const normalizedCode = normalizeDigits(code).trim();
 
-  if (!Number.isFinite(numericDriverId) || !/^\d{4}$/.test(normalizedCode)) {
+  if (!driverValidation.ok || !/^\d{4}$/.test(normalizedCode)) {
     return res.status(400).json({ error: 'driverId and 4-digit code are required' });
   }
   if (req.auth?.driverId !== String(numericDriverId)) {
@@ -394,10 +215,10 @@ export const handleDriverScanByCode = async (req, res) => {
   }
 
   try {
-    const result = await performScan({ driverId: numericDriverId, searchField: 'validation_code', searchValue: normalizedCode, scanMethod: 'code' });
+    const result = await scanTicket(db, { driverId: numericDriverId, value: normalizedCode, method: 'code' });
     res.status(result.status).json(result.payload);
   } catch (error) {
-    console.error('Driver code scan failed', error);
+    logError('Driver code scan failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -406,7 +227,7 @@ export const handleDriverSummary = async (req, res) => {
   const driverId = Number(req.params.driverId);
   const serviceDate = String(req.query.service_date || todayIso());
 
-  if (!Number.isFinite(driverId)) return res.status(400).json({ error: 'Invalid driver id' });
+  if ((!Number.isSafeInteger(driverId) || driverId <= 0)) return res.status(400).json({ error: 'Invalid driver id' });
   if (req.auth?.driverId !== String(driverId)) return res.status(403).json({ error: 'Forbidden' });
 
   try {
@@ -430,16 +251,18 @@ export const handleDriverSummary = async (req, res) => {
 
     res.json({ serviceDate, boardedCount, totalRevenue: revenueToman });
   } catch (error) {
-    console.error('Driver summary failed', error);
+    logError('Driver summary failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleDriverRecentScans = async (req, res) => {
   const driverId = Number(req.params.driverId);
-  const limit = Math.min(Number(req.query.limit || 20), 100);
+  const limitValidation = parsePositiveInt(req.query.limit ?? 20, { max: 100 });
+  if (!limitValidation.ok) return res.status(400).json({ error: 'تعداد نتایج معتبر نیست.' });
+  const limit = limitValidation.value;
 
-  if (!Number.isFinite(driverId)) return res.status(400).json({ error: 'Invalid driver id' });
+  if ((!Number.isSafeInteger(driverId) || driverId <= 0)) return res.status(400).json({ error: 'Invalid driver id' });
   if (req.auth?.driverId !== String(driverId)) return res.status(403).json({ error: 'Forbidden' });
 
   try {
@@ -458,14 +281,14 @@ export const handleDriverRecentScans = async (req, res) => {
 
     res.json(rows.map(r => mapScan(r)));
   } catch (error) {
-    console.error('Driver recent scans failed', error);
+    logError('Driver recent scans failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleDriverDashboard = async (req, res) => {
   const driverId = Number(req.params.driverId);
-  if (!Number.isFinite(driverId)) return res.status(400).json({ error: 'Invalid driver id' });
+  if ((!Number.isSafeInteger(driverId) || driverId <= 0)) return res.status(400).json({ error: 'Invalid driver id' });
   if (req.auth?.driverId !== String(driverId)) return res.status(403).json({ error: 'Forbidden' });
 
   try {
@@ -487,23 +310,19 @@ export const handleDriverDashboard = async (req, res) => {
                 SELECT COUNT(t.id)
                 FROM tickets t
                 JOIN buses b ON b.id = t.bus_id
-                WHERE b.bus_number = CONCAT(dr.name, ' - ', dr.license_plate)
-                  AND b.origin = o.name
-                  AND b.destination = d2.name
-                  AND b.departure_time = s.departure_time
+                WHERE (b.schedule_id = s.id OR (b.schedule_id IS NULL AND b.bus_number = CONCAT(dr.name, ' - ', dr.license_plate)
+                  AND b.origin = o.name AND b.destination = d2.name AND b.departure_time = s.departure_time))
                   AND DATE(t.created_at) = CURDATE()
-                  AND t.status = 'active'
+                  AND t.status <> 'cancelled'
               ) AS sold_count,
               (
                 SELECT COALESCE(SUM(t.price_paid), 0)
                 FROM tickets t
                 JOIN buses b ON b.id = t.bus_id
-                WHERE b.bus_number = CONCAT(dr.name, ' - ', dr.license_plate)
-                  AND b.origin = o.name
-                  AND b.destination = d2.name
-                  AND b.departure_time = s.departure_time
+                WHERE (b.schedule_id = s.id OR (b.schedule_id IS NULL AND b.bus_number = CONCAT(dr.name, ' - ', dr.license_plate)
+                  AND b.origin = o.name AND b.destination = d2.name AND b.departure_time = s.departure_time))
                   AND DATE(t.created_at) = CURDATE()
-                  AND t.status = 'active'
+                  AND t.status <> 'cancelled'
               ) AS sold_amount
        FROM schedules s
        JOIN stations o ON o.id = s.origin_station_id
@@ -540,7 +359,7 @@ export const handleDriverDashboard = async (req, res) => {
 
     res.json(scheduleCards);
   } catch (error) {
-    console.error('Driver dashboard failed', error);
+    logError('Driver dashboard failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };

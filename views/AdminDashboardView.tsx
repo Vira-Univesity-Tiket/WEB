@@ -1,3 +1,4 @@
+import { csvCell, csvRow } from '../utils/csv';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Icons } from '../components/Icons';
@@ -108,15 +109,14 @@ const exportToCSV = (data: any[], filename: string) => {
     const csvRows = [];
     
     // Add header row with BOM for UTF-8 support in Excel
-    csvRows.push('\uFEFF' + headers.join(','));
+    csvRows.push('\uFEFF' + csvRow(headers));
     
     // Add data rows
     for (const row of data) {
         const values = headers.map(header => {
             const val = row[header];
             // Escape quotes and commas
-            const escaped = ('' + (val ?? '')).replace(/"/g, '""');
-            return `"${escaped}"`;
+            return csvCell(val);
         });
         csvRows.push(values.join(','));
     }
@@ -130,6 +130,7 @@ const exportToCSV = (data: any[], filename: string) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 };
 
 const toDateBucket = (value?: string | null) => {
@@ -764,22 +765,12 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
           // Construct CSV content manually for multi-part structure
           let csvContent = '\uFEFF'; // BOM
           
-          // Part 1: Summary
-          csvContent += `خلاصه عملکرد راننده: ${summary.name}\n`;
-          csvContent += `پلاک,${summary.plate}\n`;
-          csvContent += `کد ملی,${summary.nationalCode}\n`;
-          csvContent += `ایستگاه های مجاز,"${summary.stations}"\n`;
-          csvContent += `تعداد کل سفرها,${summary.totalTrips}\n`;
-          csvContent += `درآمد کل (تومان),${summary.totalRevenue}\n\n`;
-
-          // Part 2: Details Header
-          csvContent += `لیست سفرها\n`;
-          csvContent += `تاریخ,ساعت,نام مسافر,مبلغ (تومان),روش اسکن\n`;
-
-          // Part 3: Details Rows
-          details.forEach((row: any) => {
-              csvContent += `${row.date},${row.time},"${row.passenger}",${row.price},${row.method}\n`;
-          });
+          csvContent += [
+            ['خلاصه عملکرد راننده', summary.name], ['پلاک', summary.plate], ['کد ملی', summary.nationalCode],
+            ['ایستگاه‌های مجاز', summary.stations], ['تعداد کل سفرها', summary.totalTrips], ['درآمد کل (تومان)', summary.totalRevenue], [],
+            ['لیست سفرها'], ['تاریخ', 'ساعت', 'نام مسافر', 'مبلغ (تومان)', 'روش اسکن'],
+            ...details.map((row: any) => [row.date, row.time, row.passenger, row.price, row.method])
+          ].map(csvRow).join('\n');
 
           const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
           const url = URL.createObjectURL(blob);
@@ -789,6 +780,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 
       } catch (e) {
           console.error(e);
@@ -1344,20 +1336,6 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
     const mapPoints = (obj: Record<string, number>) =>
       Object.entries(obj).map(([label, value]) => ({ label, value: Number(value || 0) }));
 
-    const mapTechnical = (obj: Record<string, number>) =>
-      Object.entries(obj).map(([label, value], idx) => {
-        const close = Number(value || 0);
-        const open = idx === 0 ? close : Number(Object.values(obj)[idx - 1] || close);
-        return {
-          label,
-          value: close,
-          open,
-          close,
-          high: Math.max(open, close) + Math.max(1, Math.round(close * 0.1)),
-          low: Math.max(0, Math.min(open, close) - Math.max(1, Math.round(close * 0.08)))
-        };
-      });
-
     return {
       dashboard: [
         { id: 'dash-pie', title: 'سهم شاخص‌های اصلی', kind: 'pie', points: [
@@ -1372,57 +1350,57 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
           { label: 'اطلاعیه‌ها', value: notifications.length },
           { label: 'درخواست‌ها', value: pendingRequests.length }
         ] },
-        { id: 'dash-tech', title: 'نوسان شاخص‌های کلیدی', kind: 'technical', points: [
-          { label: 'کاربران', value: users.length, open: Math.max(0, users.length - 5), high: users.length + 3, low: Math.max(0, users.length - 8), close: users.length },
-          { label: 'رانندگان', value: drivers.length, open: Math.max(0, drivers.length - 3), high: drivers.length + 2, low: Math.max(0, drivers.length - 5), close: drivers.length },
-          { label: 'برنامه‌ها', value: schedules.length, open: Math.max(0, schedules.length - 4), high: schedules.length + 2, low: Math.max(0, schedules.length - 6), close: schedules.length },
-          { label: 'تیکت‌ها', value: supportTickets.length, open: Math.max(0, supportTickets.length - 2), high: supportTickets.length + 2, low: Math.max(0, supportTickets.length - 4), close: supportTickets.length }
+        { id: 'dash-tech', title: 'مقایسه شاخص‌های کلیدی', kind: 'bar', points: [
+          { label: 'کاربران', value: users.length },
+          { label: 'رانندگان', value: drivers.length },
+          { label: 'برنامه‌ها', value: schedules.length },
+          { label: 'تیکت‌ها', value: supportTickets.length }
         ] }
       ],
       users: [
         { id: 'users-pie', title: 'ترکیب وضعیت کاربران', kind: 'pie', points: mapPoints(usersByStatus) },
         { id: 'users-line', title: 'توزیع کاربران بر اساس استان', kind: 'line', points: topN(mapPoints(usersByProvince), 8) },
-        { id: 'users-tech', title: 'روند ثبت کاربران', kind: 'technical', points: mapTechnical(usersByCreateDate) }
+        { id: 'users-tech', title: 'روند ثبت کاربران', kind: 'bar', points: mapPoints(usersByCreateDate) }
       ],
       drivers: [
         { id: 'drivers-pie', title: 'وضعیت رانندگان', kind: 'pie', points: mapPoints(driversByStatus) },
         { id: 'drivers-line', title: 'توزیع ظرفیت ناوگان', kind: 'line', points: mapPoints(driversByCapacity) },
-        { id: 'drivers-tech', title: 'روند ثبت رانندگان', kind: 'technical', points: mapTechnical(driversByDate) }
+        { id: 'drivers-tech', title: 'روند ثبت رانندگان', kind: 'bar', points: mapPoints(driversByDate) }
       ],
       stations: [
         { id: 'stations-pie', title: 'وضعیت ایستگاه‌ها', kind: 'pie', points: mapPoints(stationsByStatus) },
         { id: 'stations-line', title: 'پراکندگی مکانی ایستگاه‌ها', kind: 'line', points: mapPoints(stationsByRegion) },
-        { id: 'stations-tech', title: 'تحلیل ساختار نام ایستگاه‌ها', kind: 'technical', points: mapTechnical(stationsByNameLen) }
+        { id: 'stations-tech', title: 'تحلیل ساختار نام ایستگاه‌ها', kind: 'bar', points: mapPoints(stationsByNameLen) }
       ],
       schedules: [
         { id: 'schedules-pie', title: 'وضعیت برنامه‌ها', kind: 'pie', points: mapPoints(schedulesByStatus) },
         { id: 'schedules-line', title: 'برنامه‌ها به تفکیک مسیر', kind: 'line', points: topN(mapPoints(schedulesByRoute), 8) },
-        { id: 'schedules-tech', title: 'الگوی ساعات حرکت', kind: 'technical', points: mapTechnical(schedulesByHour) }
+        { id: 'schedules-tech', title: 'الگوی ساعات حرکت', kind: 'bar', points: mapPoints(schedulesByHour) }
       ],
       finance: [
         { id: 'finance-pie', title: 'سهم مالی بر اساس نوع', kind: 'pie', points: mapPoints(financeByType) },
         { id: 'finance-line', title: 'روند مالی روزانه', kind: 'line', points: mapPoints(financeByDate) },
-        { id: 'finance-tech', title: 'نوسان مالی بازه‌ها', kind: 'technical', points: mapTechnical(financeByAmountBand) }
+        { id: 'finance-tech', title: 'تعداد تراکنش در بازه‌های مبلغ', kind: 'bar', points: mapPoints(financeByAmountBand) }
       ],
       requests: [
         { id: 'requests-pie', title: 'نتیجه درخواست رانندگان', kind: 'pie', points: mapPoints(historyByStatus) },
         { id: 'requests-line', title: 'درخواست‌های در انتظار (روزانه)', kind: 'line', points: mapPoints(pendingByDate) },
-        { id: 'requests-tech', title: 'روند تاریخچه درخواست‌ها', kind: 'technical', points: mapTechnical(historyByDate) }
+        { id: 'requests-tech', title: 'روند تاریخچه درخواست‌ها', kind: 'bar', points: mapPoints(historyByDate) }
       ],
       notifications: [
         { id: 'notif-pie', title: 'وضعیت اطلاعیه‌ها', kind: 'pie', points: mapPoints(notificationsByStatus) },
         { id: 'notif-line', title: 'نوع اطلاعیه‌ها', kind: 'line', points: mapPoints(notificationsByType) },
-        { id: 'notif-tech', title: 'روند انتشار اطلاعیه', kind: 'technical', points: mapTechnical(notificationsByDate) }
+        { id: 'notif-tech', title: 'روند انتشار اطلاعیه', kind: 'bar', points: mapPoints(notificationsByDate) }
       ],
       support: [
         { id: 'support-pie', title: 'وضعیت تیکت‌ها', kind: 'pie', points: mapPoints(supportByStatus) },
         { id: 'support-line', title: 'توزیع زمانی تیکت‌ها', kind: 'line', points: mapPoints(supportByDayPart) },
-        { id: 'support-tech', title: 'روند ثبت تیکت', kind: 'technical', points: mapTechnical(supportByDate) }
+        { id: 'support-tech', title: 'روند ثبت تیکت', kind: 'bar', points: mapPoints(supportByDate) }
       ],
       ideas: [
         { id: 'ideas-pie', title: 'وضعیت ایده‌ها', kind: 'pie', points: mapPoints(ideasByStatus) },
         { id: 'ideas-line', title: 'دسته‌بندی ایده‌ها', kind: 'line', points: topN(mapPoints(ideasByCategory), 8) },
-        { id: 'ideas-tech', title: 'روند ثبت ایده', kind: 'technical', points: mapTechnical(ideasByDate) }
+        { id: 'ideas-tech', title: 'روند ثبت ایده', kind: 'bar', points: mapPoints(ideasByDate) }
       ],
       legal: [
         { id: 'legal-pie', title: 'حجم قوانین به تفکیک مخاطب', kind: 'pie', points: [
@@ -1434,7 +1412,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
           { label: 'کلمه', value: String(legalContent || '').trim().split(/\s+/).filter(Boolean).length },
           { label: 'خط', value: String(legalContent || '').split('\n').filter((l) => l.trim()).length }
         ] },
-        { id: 'legal-tech', title: 'نوسان طول قوانین', kind: 'technical', points: [
+        { id: 'legal-tech', title: 'نوسان طول قوانین', kind: 'bar', points: [
           { label: legalAudience === 'user' ? 'نسخه کاربران' : 'نسخه رانندگان', value: legalContent?.length || 0, open: Math.max(0, (legalContent?.length || 0) - 80), high: (legalContent?.length || 0) + 40, low: Math.max(0, (legalContent?.length || 0) - 120), close: legalContent?.length || 0 }
         ] }
       ]
@@ -1462,7 +1440,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
     <div className="min-h-[100dvh] bg-gray-50 text-gray-800 flex flex-col lg:flex-row font-sans overflow-x-hidden" dir="rtl">
       {/* Sidebar */}
       <aside className={`w-full bg-white border-b lg:border-b-0 lg:border-l border-gray-200 flex flex-col gap-3 shadow-sm z-10 lg:sticky lg:top-0 lg:h-[100dvh] overflow-y-visible lg:overflow-y-auto shrink-0 transition-all duration-300 ${isSidebarCollapsed ? 'lg:w-20 lg:p-3' : 'lg:w-72 lg:p-4'}`}>
-        <div className="p-4 rounded-[26px] bg-[linear-gradient(135deg,_#0f766e_0%,_#0ea5e9_55%,_#2563eb_100%)] text-white shadow-[0_20px_50px_rgba(14,165,233,0.28)]">
+        <div className="p-4 rounded-[26px] bg-[linear-gradient(135deg,_#0f766e_0%,_#0369a1_55%,_#2563eb_100%)] text-white shadow-[0_20px_50px_rgba(14,165,233,0.28)]">
           <div className={`flex items-start gap-3 ${isSidebarCollapsed ? 'lg:flex-col lg:items-center lg:gap-2' : 'justify-between'}`}>
             <div className={isSidebarCollapsed ? 'lg:text-center lg:hidden' : ''}>
               <div className="text-lg font-black">{isAnalyst ? 'پنل تحلیل‌گر' : 'پنل سوپر ادمین'}</div>
@@ -1518,12 +1496,12 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
           })}
         </div>
 
-        <button onClick={onLogout} className={`mt-auto w-full text-sm bg-red-50 border border-red-100 text-red-500 rounded-xl py-3 font-bold hover:bg-red-100 transition-colors ${isSidebarCollapsed ? 'lg:px-2' : ''}`}>خروج از حساب</button>
+        <button onClick={onLogout} className={`mt-auto w-full text-sm bg-red-50 border border-red-100 text-red-700 dark:text-red-300 rounded-xl py-3 font-bold hover:bg-red-100 transition-colors ${isSidebarCollapsed ? 'lg:px-2' : ''}`}>خروج از حساب</button>
       </aside>
 
       <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto lg:h-[100dvh] relative">
         {message && <div className="mb-6 text-sm p-4 rounded-xl border border-vira-accent bg-vira-light text-vira-primary shadow-sm font-bold animate-in fade-in slide-in-from-top-2">{message}</div>}
-        {loading && <div className="mb-6 text-xs text-gray-400 font-bold animate-pulse">در حال دریافت اطلاعات از سرور...</div>}
+        {loading && <div className="mb-6 text-xs text-gray-600 dark:text-gray-400 font-bold animate-pulse">در حال دریافت اطلاعات از سرور...</div>}
         <AdminAnalyticsPanel
           sectionLabel={
             tabs.find((t) => t.key === activeTab)?.label || 'تحلیل'
@@ -1592,7 +1570,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                 <div className="lg:col-span-2 bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
                     <div className="p-4 border-b font-bold sticky top-0 bg-white z-10">مدیریت اطلاعیه‌ها</div>
                     <div className="overflow-auto flex-1 p-4 space-y-3">
-                        {notifications.length === 0 && <div className="text-center text-gray-400 mt-10">هیچ اطلاعیه‌ای وجود ندارد</div>}
+                        {notifications.length === 0 && <div className="text-center text-gray-600 dark:text-gray-400 mt-10">هیچ اطلاعیه‌ای وجود ندارد</div>}
                         {activeNotifications.length > 0 && <div className="text-xs font-black text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">اطلاعیه‌ها (فعال)</div>}
                         {activeNotifications.map((notif) => (
                           <div key={notif.id} className="p-4 rounded-xl border bg-white border-gray-200 shadow-sm transition-all">
@@ -1763,7 +1741,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                 </div>
                 <div className="relative">
                   <input value={supportSearch} onChange={(e) => setSupportSearch(e.target.value)} placeholder="جستجو (عنوان/ID/دانشجویی)..." className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-vira-primary" />
-                  <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                  <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400" size={16} />
                 </div>
               </div>
               <div className="overflow-auto flex-1">
@@ -1798,7 +1776,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                     ))}
                     {filteredSupportTickets.length === 0 && (
                       <tr>
-                        <td colSpan={3} className="p-8 text-center text-gray-400">تیکتی یافت نشد</td>
+                        <td colSpan={3} className="p-8 text-center text-gray-600 dark:text-gray-400">تیکتی یافت نشد</td>
                       </tr>
                     )}
                   </tbody>
@@ -1808,7 +1786,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
 
             <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm overflow-y-auto">
               {!selectedSupportTicket ? (
-                <div className="h-full flex items-center justify-center text-gray-400 font-bold">برای مشاهده جزئیات، یک تیکت را انتخاب کنید.</div>
+                <div className="h-full flex items-center justify-center text-gray-600 dark:text-gray-400 font-bold">برای مشاهده جزئیات، یک تیکت را انتخاب کنید.</div>
               ) : (
                 <div className="space-y-5">
                   <div className="flex items-start justify-between gap-4 border-b pb-4">
@@ -1817,7 +1795,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                       <div className="text-sm text-gray-500 mt-1">
                         کاربر: <span className="font-bold">{selectedSupportTicket.user.name}</span> | شماره دانشجویی: <span className="font-mono">{selectedSupportTicket.user.studentId}</span>
                       </div>
-                      <div className="text-xs text-gray-400 mt-1">ایجاد: {new Date(selectedSupportTicket.createdAt).toLocaleString('fa-IR')}</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">ایجاد: {new Date(selectedSupportTicket.createdAt).toLocaleString('fa-IR')}</div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <button type="button" onClick={() => handleProtectedDownload(adminSupportTicketTxtUrl(selectedSupportTicket.id), `ticket-${selectedSupportTicket.id}.txt`)} className="text-xs bg-blue-50 text-blue-600 px-3 py-2 rounded-xl font-bold hover:bg-blue-100">دانلود TXT</button>
@@ -1853,7 +1831,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                                       <Icons.Download size={16} className={m.senderRole === 'admin' ? 'text-gray-500' : 'text-white'} />
                                       <span className={`text-xs font-bold truncate ${m.senderRole === 'admin' ? 'text-gray-700' : 'text-white'}`}>{a.originalName}</span>
                                     </div>
-                                    <span className={`text-[10px] opacity-80 shrink-0 ${m.senderRole === 'admin' ? 'text-gray-400' : 'text-white/80'}`}>{Math.round((a.sizeBytes || 0) / 1024)} KB</span>
+                                    <span className={`text-[10px] opacity-80 shrink-0 ${m.senderRole === 'admin' ? 'text-gray-600 dark:text-gray-400' : 'text-white/80'}`}>{Math.round((a.sizeBytes || 0) / 1024)} KB</span>
                                   </button>
                                 ))}
                               </div>
@@ -1889,7 +1867,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                           افزودن ضمیمه
                           <input type="file" multiple accept=".png,.jpg,.jpeg,.webp,.pdf,.txt" className="hidden" onChange={(e) => e.target.files && readSupportFiles(e.target.files)} />
                         </label>
-                        {supportReplyFiles.length > 0 && <span className="text-[11px] text-gray-400">{supportReplyFiles.length} فایل انتخاب شد</span>}
+                        {supportReplyFiles.length > 0 && <span className="text-[11px] text-gray-600 dark:text-gray-400">{supportReplyFiles.length} فایل انتخاب شد</span>}
                       </div>
                       {supportReplyFiles.length > 0 && (
                         <div className="flex flex-wrap gap-2">
@@ -1955,7 +1933,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                                         ))}
                                         {pendingRequests.length === 0 && (
                                             <tr>
-                                                <td colSpan={2} className="p-6 text-center text-gray-400">هیچ درخواستی موجود نیست.</td>
+                                                <td colSpan={2} className="p-6 text-center text-gray-600 dark:text-gray-400">هیچ درخواستی موجود نیست.</td>
                                             </tr>
                                         )}
                                     </tbody>
@@ -1973,7 +1951,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                                         </div>
                                         <div className="text-left">
                                             <div className="text-sm font-bold">{selectedRequest.licensePlate}</div>
-                                            <div className="text-xs text-gray-400 mt-1">پلاک خودرو</div>
+                                            <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">پلاک خودرو</div>
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1987,7 +1965,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                                             {docTypes.map((doc) => {
                                                 const src = (selectedRequest.documents as any)?.[doc.key];
                                                 if(!src) return (
-                                                    <div key={doc.key} className="border-2 border-dashed border-gray-300 rounded-xl h-32 flex items-center justify-center text-gray-400 text-xs font-bold bg-gray-50">
+                                                    <div key={doc.key} className="border-2 border-dashed border-gray-300 rounded-xl h-32 flex items-center justify-center text-gray-600 dark:text-gray-400 text-xs font-bold bg-gray-50">
                                                         {doc.label} (موجود نیست)
                                                     </div>
                                                 );
@@ -2023,7 +2001,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                                     </div>
                                 </div>
                             ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                                <div className="h-full flex flex-col items-center justify-center text-gray-600 dark:text-gray-400">
                                     <Icons.FileText size={48} className="mb-4 opacity-50" />
                                     <p>لطفا یک درخواست را جهت بررسی انتخاب کنید</p>
                                 </div>
@@ -2085,7 +2063,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                                     ))}
                                     {filteredHistory.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} className="p-8 text-center text-gray-400">موردی یافت نشد</td>
+                                            <td colSpan={5} className="p-8 text-center text-gray-600 dark:text-gray-400">موردی یافت نشد</td>
                                         </tr>
                                     )}
                                 </tbody>
@@ -2121,15 +2099,15 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="relative">
                                 <input value={searchName} onChange={e => setSearchName(e.target.value)} placeholder="جستجو بر اساس نام..." className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-vira-primary shadow-sm pl-10" />
-                                <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400" size={16} />
                             </div>
                             <div className="relative">
                                 <input value={searchStudentId} onChange={e => setSearchStudentId(toEnglishDigits(e.target.value))} placeholder="شماره دانشجویی..." className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-vira-primary shadow-sm pl-10 text-left dir-ltr" />
-                                <Icons.Book className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                <Icons.Book className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400" size={16} />
                             </div>
                             <div className="relative">
                                 <input value={searchNationalCode} onChange={e => setSearchNationalCode(toEnglishDigits(e.target.value))} placeholder="کد ملی..." className="w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-vira-primary shadow-sm pl-10 text-left dir-ltr" />
-                                <Icons.QrCode className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                <Icons.QrCode className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400" size={16} />
                             </div>
                         </div>
                     </div>
@@ -2167,7 +2145,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                                 ))}
                                 {filteredUsers.length === 0 && (
                                     <tr>
-                                        <td colSpan={5} className="p-8 text-center text-gray-400">کاربری یافت نشد</td>
+                                        <td colSpan={5} className="p-8 text-center text-gray-600 dark:text-gray-400">کاربری یافت نشد</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -2214,7 +2192,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                                         </tr>
                                     ))}
                                     {analysts.length === 0 && (
-                                      <tr><td colSpan={4} className="p-3 text-center text-gray-400">تحلیل‌گری ثبت نشده است</td></tr>
+                                      <tr><td colSpan={4} className="p-3 text-center text-gray-600 dark:text-gray-400">تحلیل‌گری ثبت نشده است</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -2271,7 +2249,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                             </div>
                         </div>
                     ) : (
-                        <div className="h-full flex flex-col items-center justify-center text-gray-400 p-6 text-center">
+                        <div className="h-full flex flex-col items-center justify-center text-gray-600 dark:text-gray-400 p-6 text-center">
                             <Icons.User size={48} className="mb-4 opacity-50" />
                             <p className="text-sm font-bold">برای مشاهده جزئیات، روی نام کاربر کلیک کنید.</p>
                         </div>
@@ -2327,7 +2305,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                                             <button onClick={() => handleStationToggle(s)} className="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded transition-colors text-gray-600">
                                                 {s.isActive ? 'غیرفعال' : 'فعال'}
                                             </button>
-                                            <button onClick={() => handleStationDelete(s.id)} className="text-xs bg-red-50 text-red-500 hover:bg-red-100 px-3 py-1 rounded transition-colors">حذف</button>
+                                            <button onClick={() => handleStationDelete(s.id)} className="text-xs bg-red-50 text-red-700 dark:text-red-300 hover:bg-red-100 px-3 py-1 rounded transition-colors">حذف</button>
                                         </td>
                                     </tr>
                                 ))}
@@ -2406,14 +2384,14 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                                             {r.status === 'pending' ? (
                                                 <button onClick={() => openRouteRequestModal(r)} className="text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-1 rounded font-bold">بررسی</button>
                                             ) : (
-                                                <span className="text-xs text-gray-400">-</span>
+                                                <span className="text-xs text-gray-600 dark:text-gray-400">-</span>
                                             )}
                                         </td>
                                     </tr>
                                 ))}
                                 {routeRequests.length === 0 && (
                                     <tr>
-                                        <td colSpan={5} className="p-6 text-center text-gray-400">درخواستی موجود نیست</td>
+                                        <td colSpan={5} className="p-6 text-center text-gray-600 dark:text-gray-400">درخواستی موجود نیست</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -2454,7 +2432,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                                                 <button onClick={() => handleScheduleToggle(sc)} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1 rounded transition-colors">
                                                     {sc.status === 'active' ? 'توقف' : 'شروع'}
                                                 </button>
-                                                <button onClick={() => handleScheduleDelete(sc.id)} className="text-xs bg-red-50 text-red-500 hover:bg-red-100 px-3 py-1 rounded transition-colors">حذف</button>
+                                                <button onClick={() => handleScheduleDelete(sc.id)} className="text-xs bg-red-50 text-red-700 dark:text-red-300 hover:bg-red-100 px-3 py-1 rounded transition-colors">حذف</button>
                                             </td>
                                         </tr>
                                     );
@@ -2598,7 +2576,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                     ))}
                     {ideas.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-8 text-center text-gray-400">موردی یافت نشد</td>
+                        <td colSpan={5} className="p-8 text-center text-gray-600 dark:text-gray-400">موردی یافت نشد</td>
                       </tr>
                     )}
                   </tbody>
@@ -2726,13 +2704,13 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                           {h.note && <div className="text-[11px] text-gray-500 mt-1">{h.note}</div>}
                         </div>
                       )) : (
-                        <div className="text-xs text-gray-400">تاریخچه‌ای ثبت نشده است</div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">تاریخچه‌ای ثبت نشده است</div>
                       )}
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="h-full flex flex-col items-center justify-center text-gray-400 p-6 text-center">
+                <div className="h-full flex flex-col items-center justify-center text-gray-600 dark:text-gray-400 p-6 text-center">
                   <Icons.MessageSquare size={48} className="mb-4 opacity-50" />
                   <p className="text-sm font-bold">برای مشاهده جزئیات، روی یک ایده کلیک کنید.</p>
                 </div>
@@ -2788,7 +2766,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                       >
                         <td className="p-3">
                           <div className="font-black text-gray-800">{item.rating.toLocaleString('fa-IR')} / 5</div>
-                          <div className="text-[11px] text-gray-400">{item.price}</div>
+                          <div className="text-[11px] text-gray-600 dark:text-gray-400">{item.price}</div>
                         </td>
                         <td className="p-3">
                           <div className="font-bold text-gray-800">{item.userName}</div>
@@ -2811,7 +2789,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                     ))}
                     {filteredTicketFeedbacks.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-8 text-center text-gray-400">نظری ثبت نشده است</td>
+                        <td colSpan={5} className="p-8 text-center text-gray-600 dark:text-gray-400">نظری ثبت نشده است</td>
                       </tr>
                     )}
                   </tbody>
@@ -2881,7 +2859,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                   </button>
                 </div>
               ) : (
-                <div className="h-full flex flex-col items-center justify-center text-gray-400 p-6 text-center">
+                <div className="h-full flex flex-col items-center justify-center text-gray-600 dark:text-gray-400 p-6 text-center">
                   <Icons.MessageSquare size={48} className="mb-4 opacity-50" />
                   <p className="text-sm font-bold">برای مشاهده جزئیات، روی یک بازخورد کلیک کنید.</p>
                 </div>
@@ -3059,9 +3037,9 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                              <label className="block text-sm text-gray-500 mb-1">درصد کمیسیون شرکت</label>
                              <div className="flex gap-2">
                                  <input type="number" value={commission} onChange={e => setCommission(Number(e.target.value))} className="flex-1 bg-gray-50 border rounded-xl p-3 text-center font-bold outline-none focus:border-vira-primary" />
-                                 <span className="self-center font-bold text-gray-400">%</span>
+                                 <span className="self-center font-bold text-gray-600 dark:text-gray-400">%</span>
                              </div>
-                             <p className="text-xs text-gray-400 mt-2">این درصد از مبلغ هر بلیط کسر شده و به حساب شرکت واریز می‌شود. مابقی به راننده تعلق می‌گیرد.</p>
+                             <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">این درصد از مبلغ هر بلیط کسر شده و به حساب شرکت واریز می‌شود. مابقی به راننده تعلق می‌گیرد.</p>
                          </div>
                          <div className="pt-2 border-t border-dashed">
                              <label className="block text-sm text-gray-500 mb-1">سقف شارژ هفتگی کیف پول</label>
@@ -3078,12 +3056,12 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                                    className="flex-1 bg-gray-50 border rounded-xl p-3 text-center font-bold outline-none focus:border-vira-primary"
                                    placeholder="مثال: 5,000,000"
                                  />
-                                 <span className="self-center font-bold text-gray-400 whitespace-nowrap">تومان</span>
+                                 <span className="self-center font-bold text-gray-600 dark:text-gray-400 whitespace-nowrap">تومان</span>
                              </div>
                              {weeklyWalletLimitInput && weeklyWalletLimitInput !== '0' && (
                                <div className="mt-2 text-[11px] text-blue-600 font-bold">{amountToPersianWordsToman(weeklyWalletLimitInput)}</div>
                              )}
-                             <p className="text-xs text-gray-400 mt-2 leading-6">
+                             <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 leading-6">
                                مقدار ۰ یعنی بدون محدودیت. این محدودیت فقط سمت سرور اعمال می‌شود و قابل دور زدن نیست.
                                {weeklyWalletLimitMeta.updatedAt && (
                                  <span className="block mt-1">
@@ -3104,7 +3082,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                      <button onClick={() => loadFinance(financeTab as any)} className="bg-vira-light text-vira-primary px-4 py-2 rounded-lg text-sm font-bold hover:bg-vira-accent/30">اعمال فیلتر</button>
                      <div className="mr-auto relative w-full md:w-64">
                         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="جستجو در کد پیگیری..." className="w-full bg-gray-50 border rounded-xl px-4 py-2 text-sm outline-none focus:border-vira-primary" />
-                        <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400" size={16} />
                      </div>
                  </div>
              )}
@@ -3157,7 +3135,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                             ))}
                             {filteredFinance.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="p-8 text-center text-gray-400">داده‌ای یافت نشد</td>
+                                    <td colSpan={8} className="p-8 text-center text-gray-600 dark:text-gray-400">داده‌ای یافت نشد</td>
                                 </tr>
                             )}
                          </tbody>
@@ -3176,7 +3154,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
                   <div className="text-lg font-black text-gray-800">بررسی درخواست مسیر</div>
-                  <div className="text-xs text-gray-400 mt-1">شناسه: {selectedRouteReq.id}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">شناسه: {selectedRouteReq.id}</div>
                 </div>
                 <button onClick={() => setSelectedRouteReq(null)} className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100">
                   <Icons.X size={18} />
@@ -3232,7 +3210,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
                   <div className="text-lg font-black text-gray-800">مدارک راننده</div>
-                  <div className="text-xs text-gray-400 mt-1">{docsDriver.name} • {docsDriver.licensePlate}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{docsDriver.name} • {docsDriver.licensePlate}</div>
                 </div>
                 <button onClick={() => setDocsDriver(null)} className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100">
                   <Icons.X size={18} />
@@ -3248,11 +3226,11 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
                     <div key={dt.key} className="border border-gray-200 rounded-2xl overflow-hidden">
                       <div className="p-3 bg-gray-50 border-b font-bold text-sm text-gray-700">{dt.label}</div>
                       <div className="p-3">
-                        {!src && <div className="text-center text-gray-400 text-sm py-10">فایلی ثبت نشده است</div>}
+                        {!src && <div className="text-center text-gray-600 dark:text-gray-400 text-sm py-10">فایلی ثبت نشده است</div>}
                         {isImg && <img src={src} alt={dt.label} className="w-full h-64 object-contain bg-white rounded-xl" />}
                         {isPdf && (
                           <object data={src} type="application/pdf" className="w-full h-64 rounded-xl bg-white">
-                            <div className="text-center text-gray-400 text-sm py-10">پیش‌نمایش PDF در دسترس نیست</div>
+                            <div className="text-center text-gray-600 dark:text-gray-400 text-sm py-10">پیش‌نمایش PDF در دسترس نیست</div>
                           </object>
                         )}
                         {!isImg && !isPdf && src && (
@@ -3274,7 +3252,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLogout, role 
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
                   <div className="text-lg font-black text-gray-800">ویرایش راننده</div>
-                  <div className="text-xs text-gray-400 mt-1">{editingDriver.name} • {editingDriver.licensePlate}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{editingDriver.name} • {editingDriver.licensePlate}</div>
                 </div>
                 <button onClick={() => setEditingDriver(null)} className="p-2 bg-gray-50 rounded-full text-gray-500 hover:bg-gray-100">
                   <Icons.X size={18} />

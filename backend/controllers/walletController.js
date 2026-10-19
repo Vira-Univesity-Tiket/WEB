@@ -1,3 +1,4 @@
+import { logError } from '../logging.js';
 import { db } from '../db.js';
 import { auditLog } from '../security.js';
 import { parseMoneyToman } from '../validation.js';
@@ -27,7 +28,8 @@ const mapTransaction = (row) => {
 
 const toSafeJson = (value) => {
   try {
-    return JSON.stringify(value).slice(0, 4000);
+    const json = JSON.stringify(value);
+    return json.length <= 4000 ? json : JSON.stringify({ truncated: true });
   } catch {
     return '{}';
   }
@@ -48,15 +50,15 @@ const toClientTopupStatus = (status) => {
 
 const topupDescription = (tomanAmount) => `شارژ کیف پول ویرا - ${Number(tomanAmount).toLocaleString('fa-IR')} تومان`;
 
-const getTopupExpiryMinutes = async () => {
-  const raw = await getSetting('payment_topup_expiry_minutes');
+const getTopupExpiryMinutes = async (executor = db) => {
+  const raw = await getSetting('payment_topup_expiry_minutes', executor);
   const n = Number(raw || 20);
   if (!Number.isFinite(n) || n < 5 || n > 120) return 20;
   return Math.floor(n);
 };
 
-const enforceWeeklyLimit = async (connection, userId, rialAmount) => {
-  const weeklyLimitTomanRaw = await getSetting('weekly_wallet_topup_limit_toman');
+const enforceWeeklyLimit = async (connection, userId, rialAmount, includePending = false) => {
+  const weeklyLimitTomanRaw = await getSetting('weekly_wallet_topup_limit_toman', connection);
   const weeklyLimitToman = weeklyLimitTomanRaw ? Number(weeklyLimitTomanRaw) : 0;
   if (!Number.isFinite(weeklyLimitToman) || weeklyLimitToman <= 0) {
     return { ok: true };
@@ -72,7 +74,12 @@ const enforceWeeklyLimit = async (connection, userId, rialAmount) => {
      FOR UPDATE`,
     [userId]
   );
-  const usedRial = Number(sumRows?.[0]?.total_rial || 0);
+  let usedRial = Number(sumRows?.[0]?.total_rial || 0);
+  if (includePending) {
+    const expiryMinutes = await getTopupExpiryMinutes(connection);
+    const [[pending]] = await connection.query("SELECT COALESCE(SUM(amount), 0) AS total_rial FROM payment_transactions WHERE user_id = ? AND status = 'pending' AND created_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)", [userId, expiryMinutes]);
+    usedRial += Number(pending.total_rial);
+  }
   if (usedRial + rialAmount > weeklyLimitRial) {
     const remainingRial = Math.max(0, weeklyLimitRial - usedRial);
     return {
@@ -204,7 +211,7 @@ export const handleGetTransactions = async (req, res) => {
     );
     res.json(rows.map(mapTransaction));
   } catch (error) {
-    console.error('-> Get Transactions Error:', error);
+    logError('-> Get Transactions Error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -232,6 +239,7 @@ export const handleTopUpInitiate = async (req, res) => {
 
   const connection = await db.getConnection();
   try {
+    await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
     await connection.beginTransaction();
     const [users] = await connection.query(
       `SELECT id, status
@@ -251,10 +259,10 @@ export const handleTopUpInitiate = async (req, res) => {
       return res.status(403).json({ error: 'User suspended' });
     }
 
-    const weeklyLimitCheck = await enforceWeeklyLimit(connection, user.id, amountValidation.rial);
+    const weeklyLimitCheck = await enforceWeeklyLimit(connection, user.id, amountValidation.rial, true);
     if (!weeklyLimitCheck.ok) {
       await connection.rollback();
-      await auditLog(db, req, 'payment.initiate.weekly_limit_rejected', 'payment_transaction', null, {
+      await auditLog(connection, req, 'payment.initiate.weekly_limit_rejected', 'payment_transaction', null, {
         userId: user.id,
         amountRial: amountValidation.rial
       });
@@ -267,7 +275,7 @@ export const handleTopUpInitiate = async (req, res) => {
       [user.id, amountValidation.rial, TOPUP_GATEWAY]
     );
     const paymentId = insertResult.insertId;
-    const callbackUrl = `${getPaymentConfig().callbackUrl}?transactionId=${paymentId}`;
+    const callbackUrl = appendQuery(getPaymentConfig().callbackUrl, { transactionId: paymentId });
     const gatewayRequest = await requestZarinpalPayment({
       amountRial: amountValidation.rial,
       description: topupDescription(amountValidation.toman),
@@ -283,9 +291,9 @@ export const handleTopUpInitiate = async (req, res) => {
     );
     await connection.commit();
 
-    const expiryMinutes = await getTopupExpiryMinutes();
+    const expiryMinutes = await getTopupExpiryMinutes(connection);
     const expiresAt = new Date(Date.now() + (expiryMinutes * 60 * 1000)).toISOString();
-    await auditLog(db, req, 'payment.initiate', 'payment_transaction', paymentId, {
+    await auditLog(connection, req, 'payment.initiate', 'payment_transaction', paymentId, {
       userId: user.id,
       amountRial: amountValidation.rial,
       gateway: TOPUP_GATEWAY,
@@ -300,8 +308,8 @@ export const handleTopUpInitiate = async (req, res) => {
     });
   } catch (error) {
     await connection.rollback();
-    console.error('Topup initiate failed:', error);
-    await auditLog(db, req, 'payment.initiate.failed', 'payment_transaction', null, {
+    logError('Topup initiate failed:', error);
+    await auditLog(connection, req, 'payment.initiate.failed', 'payment_transaction', null, {
       message: String(error?.message || 'unknown')
     });
     res.status(500).json({ error: 'Server error' });
@@ -321,6 +329,7 @@ export const handleTopUpCallback = async (req, res) => {
   const { transactionId, authority, gatewayStatus, refId, merged } = extractCallbackFields(req);
   const connection = await db.getConnection();
   try {
+    await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
     await connection.beginTransaction();
     const payment = await resolvePaymentByCallback(connection, transactionId, authority);
     if (!payment) {
@@ -328,7 +337,12 @@ export const handleTopUpCallback = async (req, res) => {
       return res.status(404).json({ error: 'Invalid ID' });
     }
 
-    await auditLog(db, req, 'payment.callback.received', 'payment_transaction', payment.id, {
+    if (!authority || authority !== payment.authority) {
+      await connection.rollback();
+      return res.status(400).json({ error: 'شناسه مرجع پرداخت با تراکنش مطابقت ندارد.' });
+    }
+
+    await auditLog(connection, req, 'payment.callback.received', 'payment_transaction', payment.id, {
       transactionId: payment.id,
       authority: authority || payment.authority,
       status: gatewayStatus || null
@@ -336,7 +350,7 @@ export const handleTopUpCallback = async (req, res) => {
 
     if (payment.status === 'success') {
       await connection.commit();
-      await auditLog(db, req, 'payment.duplicate_callback', 'payment_transaction', payment.id, {
+      await auditLog(connection, req, 'payment.duplicate_callback', 'payment_transaction', payment.id, {
         reason: 'already_success'
       });
       return replyCallback(req, res, {
@@ -362,7 +376,7 @@ export const handleTopUpCallback = async (req, res) => {
     if (gatewayStatus === 'NOK') {
       await markPaymentState(connection, payment.id, 'cancelled', merged, refId || null, null);
       await connection.commit();
-      await auditLog(db, req, 'payment.verify.failed', 'payment_transaction', payment.id, { reason: 'gateway_status_nok' });
+      await auditLog(connection, req, 'payment.verify.failed', 'payment_transaction', payment.id, { reason: 'gateway_status_nok' });
       return replyCallback(req, res, {
         success: false,
         transactionId: String(payment.id),
@@ -379,7 +393,7 @@ export const handleTopUpCallback = async (req, res) => {
     if (!verifyResult.success) {
       await markPaymentState(connection, payment.id, 'failed', { callback: merged, verify: verifyResult.gatewayPayload }, refId || verifyResult.referenceId || null, verifyResult.gatewayTransactionId || null);
       await connection.commit();
-      await auditLog(db, req, 'payment.verify.failed', 'payment_transaction', payment.id, {
+      await auditLog(connection, req, 'payment.verify.failed', 'payment_transaction', payment.id, {
         code: verifyResult.code,
         message: verifyResult.message || null
       });
@@ -403,25 +417,17 @@ export const handleTopUpCallback = async (req, res) => {
       await connection.rollback();
       return res.status(404).json({ error: 'User not found' });
     }
+    // Verification proves the money was received. Preserve that credit even if an
+    // administrator changed account status or the limit after payment initiation.
     if (users[0].status === 'suspended') {
-      await markPaymentState(connection, payment.id, 'failed', { callback: merged, verify: verifyResult.gatewayPayload, reason: 'user_suspended' }, refId || verifyResult.referenceId || null, verifyResult.gatewayTransactionId || null);
-      await connection.commit();
-      return res.status(403).json({ error: 'User suspended' });
+      await auditLog(connection, req, 'payment.received_for_suspended_user', 'payment_transaction', payment.id);
     }
-
     const weeklyLimitCheck = await enforceWeeklyLimit(connection, payment.user_id, Number(payment.amount));
     if (!weeklyLimitCheck.ok) {
-      await markPaymentState(connection, payment.id, 'failed', { callback: merged, verify: verifyResult.gatewayPayload, reason: 'weekly_limit' }, refId || verifyResult.referenceId || null, verifyResult.gatewayTransactionId || null);
-      await connection.commit();
-      return replyCallback(req, res, {
-        success: false,
-        transactionId: String(payment.id),
-        status: 'failed',
-        message: weeklyLimitCheck.message
-      });
+      await auditLog(connection, req, 'payment.received_above_initiation_limit', 'payment_transaction', payment.id);
     }
 
-    const referenceId = refId || verifyResult.referenceId || '';
+    const referenceId = verifyResult.referenceId || '';
     const trackingNumber = makeWalletTrackingNumber(referenceId);
 
     await connection.query(
@@ -446,12 +452,12 @@ export const handleTopUpCallback = async (req, res) => {
     );
 
     await connection.commit();
-    await auditLog(db, req, 'wallet.topup.applied', 'payment_transaction', payment.id, {
+    await auditLog(connection, req, 'wallet.topup.applied', 'payment_transaction', payment.id, {
       userId: payment.user_id,
       amountRial: Number(payment.amount),
       trackingNumber
     });
-    await auditLog(db, req, 'payment.verify.success', 'payment_transaction', payment.id, {
+    await auditLog(connection, req, 'payment.verify.success', 'payment_transaction', payment.id, {
       referenceId: referenceId || null
     });
 
@@ -464,8 +470,8 @@ export const handleTopUpCallback = async (req, res) => {
     });
   } catch (error) {
     await connection.rollback();
-    console.error('Topup callback failed:', error);
-    await auditLog(db, req, 'payment.callback.failed', 'payment_transaction', transactionId || null, {
+    logError('Topup callback failed:', error);
+    await auditLog(connection, req, 'payment.callback.failed', 'payment_transaction', transactionId || null, {
       message: String(error?.message || 'unknown')
     });
     return res.status(500).json({ error: 'Server error' });
@@ -477,7 +483,7 @@ export const handleTopUpCallback = async (req, res) => {
 export const handleTopUpStatus = async (req, res) => {
   if (!(await ensurePaymentAvailable(req, res, 'status'))) return;
   const txId = Number(req.params.transactionId);
-  if (!Number.isFinite(txId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(txId) || txId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
   if (!req.auth?.studentId) return res.status(400).json({ error: 'student_id required' });
 
   try {
@@ -501,7 +507,7 @@ export const handleTopUpStatus = async (req, res) => {
       updatedAt: row.updated_at
     });
   } catch (error) {
-    console.error('Topup status failed:', error);
+    logError('Topup status failed:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };

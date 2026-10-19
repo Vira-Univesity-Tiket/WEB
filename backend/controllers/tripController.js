@@ -1,3 +1,4 @@
+import { logError } from '../logging.js';
 
 import { db } from '../db.js';
 import { parsePositiveInt } from '../validation.js';
@@ -60,11 +61,9 @@ export const handleGetBusSchedule = async (req, res) => {
                 SELECT COUNT(t.id)
                 FROM tickets t
                 JOIN buses b ON b.id = t.bus_id
-                WHERE b.bus_number = CONCAT(d.name, ' - ', d.license_plate)
-                  AND b.origin = o.name
-                  AND b.destination = ds.name
-                  AND b.departure_time = s.departure_time
-                  AND t.status = 'active'
+                WHERE (b.schedule_id = s.id OR (b.schedule_id IS NULL AND b.bus_number = CONCAT(d.name, ' - ', d.license_plate)
+                  AND b.origin = o.name AND b.destination = ds.name AND b.departure_time = s.departure_time))
+                  AND t.status <> 'cancelled'
                   AND DATE(t.created_at) = CURDATE()
               ) AS sold_count
        FROM schedules s
@@ -83,7 +82,7 @@ export const handleGetBusSchedule = async (req, res) => {
 
     res.json(rows.map(mapScheduleToBusOption));
   } catch (error) {
-    console.error('Get bus schedule failed', error);
+    logError('Get bus schedule failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };

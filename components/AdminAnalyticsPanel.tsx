@@ -1,7 +1,8 @@
+import { csvRow } from '../utils/csv';
 import React, { useMemo, useRef, useState } from 'react';
 import { Icons } from './Icons';
 
-export type AnalyticsChartKind = 'pie' | 'line' | 'technical';
+export type AnalyticsChartKind = 'pie' | 'line' | 'bar' | 'technical';
 
 export interface AnalyticsPoint {
   label: string;
@@ -41,7 +42,7 @@ const SVG_WIDTH = 800;
 const SVG_HEIGHT = 400;
 const PERSIAN_FONT_STACK = '"IRANSans", "Vazirmatn", "Segoe UI", Tahoma, sans-serif';
 
-const sanitizeFileName = (value: string) => String(value || 'chart').replace(/[^\w\-]+/g, '_');
+const sanitizeFileName = (value: string) => String(value || 'chart').replace(/[^\w-]+/g, '_');
 
 const downloadBlob = (blob: Blob, fileName: string) => {
   const url = URL.createObjectURL(blob);
@@ -54,7 +55,7 @@ const downloadBlob = (blob: Blob, fileName: string) => {
   URL.revokeObjectURL(url);
 };
 
-const toCsvLine = (cells: Array<string | number>) => cells.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',');
+const toCsvLine = csvRow;
 
 const describeArcPath = (cx: number, cy: number, r: number, startAngle: number, endAngle: number) => {
   const x1 = cx + r * Math.cos(startAngle);
@@ -400,6 +401,23 @@ const AdminAnalyticsPanel: React.FC<AdminAnalyticsPanelProps> = ({ sectionLabel,
     );
   };
 
+  const renderBarChart = (chart: AnalyticsChart, points: AnalyticsPoint[]) => {
+    const maximum = Math.max(1, ...points.map(point => point.value));
+    const slot = 700 / Math.max(1, points.length);
+    return <svg role="img" aria-label={chart.title} ref={element => { svgRefs.current[chart.id] = element; }} viewBox="0 0 800 400" className="w-full h-[420px]" style={{ fontFamily: PERSIAN_FONT_STACK }}>
+      <rect width="800" height="400" fill="#fff" />
+      {points.map((point, index) => {
+        const height = Math.max(0, point.value / maximum * 270);
+        const x = 60 + index * slot;
+        return <g key={point.label}>
+          <rect x={x + slot * .2} y={320 - height} width={slot * .6} height={height} rx="5" fill={CHART_COLORS[index % CHART_COLORS.length]} onMouseMove={event => showTooltip(event, chart.id, point.label, point.value)} onMouseLeave={() => setTooltip(null)} />
+          <text x={x + slot / 2} y={310 - height} textAnchor="middle" fill="#334155" fontSize="18">{toFaNum(point.value)}</text>
+          <text x={x + slot / 2} y="350" textAnchor="middle" fill="#475569" fontSize="16">{compactLabel(point.label, 10)}</text>
+        </g>;
+      })}
+    </svg>;
+  };
+
   const renderTechnicalChart = (chart: AnalyticsChart, points: AnalyticsPoint[]) => {
     const width = SVG_WIDTH;
     const height = SVG_HEIGHT;
@@ -557,6 +575,7 @@ const AdminAnalyticsPanel: React.FC<AdminAnalyticsPanelProps> = ({ sectionLabel,
                 <div className="relative" data-chart-surface>
                   {chart.kind === 'pie' && renderPieChart(chart, points)}
                   {chart.kind === 'line' && renderLineChart(chart, points)}
+                  {chart.kind === 'bar' && renderBarChart(chart, points)}
                   {chart.kind === 'technical' && renderTechnicalChart(chart, points)}
                   {renderTooltip(chart.id)}
                 </div>

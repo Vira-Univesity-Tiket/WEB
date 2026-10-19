@@ -132,7 +132,7 @@ const FeedbackView: React.FC<FeedbackViewProps> = ({ onBack, showToast }) => {
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 p-4 flex items-center justify-between shadow-sm sticky top-0 z-10 border-b dark:border-slate-800 flex-none">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
+          <button aria-label="بازگشت به خانه" onClick={onBack} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
             <Icons.ArrowRight size={24} className="text-gray-700 dark:text-gray-200" />
           </button>
           <h2 className="text-lg font-bold text-gray-800 dark:text-white">ثبت ایده و نظرات</h2>
@@ -150,13 +150,13 @@ const FeedbackView: React.FC<FeedbackViewProps> = ({ onBack, showToast }) => {
         <div className="flex bg-gray-100 dark:bg-slate-800 p-1 rounded-xl">
           <button
             onClick={() => setTab('list')}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tab === 'list' ? 'bg-white dark:bg-slate-700 text-gray-800 dark:text-white shadow-sm' : 'text-gray-400'}`}
+            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tab === 'list' ? 'bg-white dark:bg-slate-700 text-gray-800 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400'}`}
           >
             ایده‌های من
           </button>
           <button
             onClick={() => { resetForm(); setTab('new'); }}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tab === 'new' ? 'bg-white dark:bg-slate-700 text-gray-800 dark:text-white shadow-sm' : 'text-gray-400'}`}
+            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tab === 'new' ? 'bg-white dark:bg-slate-700 text-gray-800 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400'}`}
           >
             {editing ? 'ویرایش' : 'ثبت جدید'}
           </button>
@@ -204,7 +204,7 @@ const FeedbackView: React.FC<FeedbackViewProps> = ({ onBack, showToast }) => {
                   className="w-full min-h-[140px] bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-vira-primary"
                   placeholder="مشکل یا پیشنهاد خود را کامل بنویسید..."
                 />
-                <div className="mt-1 text-[11px] text-gray-400">{description.length.toLocaleString('fa-IR')} / ۳۰۰۰</div>
+                <div className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">{description.length.toLocaleString('fa-IR')} / ۳۰۰۰</div>
               </div>
 
               <button
@@ -253,7 +253,7 @@ const FeedbackView: React.FC<FeedbackViewProps> = ({ onBack, showToast }) => {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="font-black text-gray-900 dark:text-white text-sm truncate">{idea.title}</div>
-                        <div className="mt-1 text-[11px] text-gray-400">
+                        <div className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">
                           {new Date(idea.createdAt).toLocaleDateString('fa-IR')} · {new Date(idea.updatedAt).toLocaleDateString('fa-IR')}
                         </div>
                       </div>
@@ -274,7 +274,7 @@ const FeedbackView: React.FC<FeedbackViewProps> = ({ onBack, showToast }) => {
                     )}
 
                     <div className="mt-4 flex items-center justify-between">
-                      <div className="text-[11px] text-gray-400">
+                      <div className="text-[11px] text-gray-600 dark:text-gray-400">
                         {idea.category ? `دسته‌بندی: ${idea.category}` : 'بدون دسته‌بندی'}
                       </div>
                       <div className="flex items-center gap-2">
@@ -284,7 +284,7 @@ const FeedbackView: React.FC<FeedbackViewProps> = ({ onBack, showToast }) => {
                           className={`px-3 py-2 rounded-xl text-xs font-black border transition-colors ${
                             canEdit(idea)
                               ? 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-800'
-                              : 'bg-gray-100 dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-400 cursor-not-allowed'
+                              : 'bg-gray-100 dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 cursor-not-allowed'
                           }`}
                         >
                           ویرایش
@@ -295,7 +295,7 @@ const FeedbackView: React.FC<FeedbackViewProps> = ({ onBack, showToast }) => {
                           className={`px-3 py-2 rounded-xl text-xs font-black border transition-colors ${
                             canEdit(idea)
                               ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 hover:bg-red-100'
-                              : 'bg-gray-100 dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-400 cursor-not-allowed'
+                              : 'bg-gray-100 dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 cursor-not-allowed'
                           }`}
                         >
                           حذف
@@ -303,7 +303,7 @@ const FeedbackView: React.FC<FeedbackViewProps> = ({ onBack, showToast }) => {
                       </div>
                     </div>
                     {!canEdit(idea) && (
-                      <div className="mt-3 text-[11px] text-gray-400">
+                      <div className="mt-3 text-[11px] text-gray-600 dark:text-gray-400">
                         پس از شروع بررسی، امکان ویرایش/حذف وجود ندارد.
                       </div>
                     )}

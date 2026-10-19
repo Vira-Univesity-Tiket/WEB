@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Icons } from '../components/Icons';
 import {
   DriverScanItem,
@@ -16,9 +16,12 @@ import {
   driverListRouteRequests,
   getStations,
   hasDriverAuthToken,
+  clearDriverAuthToken,
   getLegalContent
 } from '../services/apiService';
 import Toast from '../components/Toast';
+import TicketCameraScanner from '../components/TicketCameraScanner';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 import { addCommas, amountToPersianWordsToman, formatAmountFa, formatTomanFa, removeCommas, toEnglishDigits } from '../utils/numberUtils';
 import StationSelect from '../components/StationSelect';
 import type { DriverRouteRequest, Station } from '../types';
@@ -70,6 +73,7 @@ const DriverAppView: React.FC = () => {
   const [pendingMessage, setPendingMessage] = useState('');
   const [registerSubmitting, setRegisterSubmitting] = useState(false);
   const [showLegal, setShowLegal] = useState(false);
+  const legalDialog = useDialogFocus(showLegal, () => setShowLegal(false));
   const [legalContent, setLegalContent] = useState('در حال دریافت قوانین...');
   const [legalLoading, setLegalLoading] = useState(false);
   
@@ -77,7 +81,6 @@ const DriverAppView: React.FC = () => {
   const [showScanner, setShowScanner] = useState(false);
   const [scannerMode, setScannerMode] = useState<'camera' | 'manual'>('camera');
   const [manualScannerInput, setManualScannerInput] = useState('');
-  const [cameraLoading, setCameraLoading] = useState(false);
   const [scanStatus, setScanStatus] = useState<{
     type: 'idle' | 'loading' | 'success' | 'error';
     title: string;
@@ -87,15 +90,11 @@ const DriverAppView: React.FC = () => {
   // Custom Toast State for Driver View
   const [toast, setToast] = useState({ message: '', type: 'info' as 'success' | 'error' | 'info', visible: false });
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const intervalRef = useRef<any>(null);
   const isProcessingScanRef = useRef(false);
-  const lastScanValueRef = useRef<string>('');
-  const lastScanAtRef = useRef<number>(0);
   const manualInputRef = useRef<HTMLInputElement>(null);
-
-  const canUseBarcodeDetector = useMemo(() => typeof window !== 'undefined' && 'BarcodeDetector' in window, []);
+  const scannerDialog = useDialogFocus(showScanner, () => setShowScanner(false));
+  const [loginSubmitting, setLoginSubmitting] = useState(false);
+  const [dashboardError, setDashboardError] = useState('');
 
   // Restore session on mount
   useEffect(() => {
@@ -128,16 +127,17 @@ const DriverAppView: React.FC = () => {
         getDriverRecentScans(driverId),
         getDriverDashboard(driverId)
       ]);
+      setDashboardError('');
       setSummary(summaryData);
       setRecentScans(scansData);
       setDashboardCards(dashboardData);
     } catch (e: any) {
-      if (String(e?.message || '').includes('ورود به حساب کاربری الزامی است')) {
+      if (e?.status === 401 || String(e?.message || '').includes('ورود به حساب کاربری الزامی است')) {
         handleLogout();
         setError('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
         return;
       }
-      console.error(e);
+      setDashboardError(e?.message || 'اطلاعات داشبورد دریافت نشد. دوباره تلاش کنید.');
     }
   };
 
@@ -166,6 +166,7 @@ const DriverAppView: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loginSubmitting) return;
     setError('');
     setPendingMessage('');
     const normalizedUser = toEnglishDigits(username).trim();
@@ -179,6 +180,7 @@ const DriverAppView: React.FC = () => {
       return;
     }
 
+    setLoginSubmitting(true);
     try {
       const data: any = await driverLogin(normalizedUser, normalizedPass);
       
@@ -240,12 +242,17 @@ const DriverAppView: React.FC = () => {
       await refreshData(data.id);
     } catch (err: any) {
       setError(err?.message || 'ورود ناموفق بود');
-    }
+    } finally { setLoginSubmitting(false); }
   };
 
   const handleLogout = () => {
     setSession(null);
     localStorage.removeItem(DRIVER_STORAGE_KEY);
+    clearDriverAuthToken();
+    setShowScanner(false);
+    setCodeInput(''); setManualScannerInput('');
+    setRecentScans([]); setDashboardCards([]);
+    setSummary({ boardedCount: 0, totalRevenue: 0, serviceDate: '' });
     setUsername('');
     setPassword('');
     setIsRegistering(false);
@@ -360,14 +367,15 @@ const DriverAppView: React.FC = () => {
 
   // --- Scanner Logic ---
   const processQrText = async (value: string) => {
-    if (!session) return;
+    if (!session || isProcessingScanRef.current) return;
+    isProcessingScanRef.current = true;
     try {
       setScanStatus({ type: 'loading', title: 'در حال بررسی بلیط...' });
       const scan = await driverScanQr(session.id, value.trim());
       setScanStatus({
         type: 'success',
         title: 'بلیط تایید شد',
-        detail: `${scan.passengerName} | کد ${scan.validationCode || '----'}`
+        detail: `${scan.passengerName} | ${scan.count || 1} مسافر | کد ${scan.validationCode || '----'}`
       });
       showDriverToast(`مسافر تایید شد: ${scan.passengerName}`, 'success');
       await refreshData(session.id);
@@ -378,18 +386,19 @@ const DriverAppView: React.FC = () => {
         detail: err?.message || 'کد بلیط معتبر نیست'
       });
       showDriverToast(err?.message || 'اسکن نامعتبر', 'error');
-    }
+    } finally { isProcessingScanRef.current = false; }
   };
 
   const processCode = async (value: string, source: 'dashboard' | 'overlay') => {
-    if (!session) return;
+    if (!session || isProcessingScanRef.current) return;
+    isProcessingScanRef.current = true;
     try {
       setScanStatus({ type: 'loading', title: 'در حال بررسی بلیط...' });
       const scan = await driverScanCode(session.id, value);
       setScanStatus({
         type: 'success',
         title: 'بلیط تایید شد',
-        detail: `${scan.passengerName} | کد ${scan.validationCode || '----'}`
+        detail: `${scan.passengerName} | ${scan.count || 1} مسافر | کد ${scan.validationCode || '----'}`
       });
       showDriverToast(`مسافر تایید شد: ${scan.passengerName}`, 'success');
       
@@ -404,96 +413,20 @@ const DriverAppView: React.FC = () => {
         detail: err?.message || 'کد بلیط معتبر نیست'
       });
       showDriverToast(err?.message || 'کد نامعتبر', 'error');
-      if (source === 'dashboard') setCodeInput('');
-      else setManualScannerInput('');
-    }
+      // Keep an unsuccessful code available for correction.
+    } finally { isProcessingScanRef.current = false; }
   };
 
   const openScanner = () => {
-      setScanStatus({ type: 'idle', title: '' });
-      if (!canUseBarcodeDetector) {
-          setScannerMode('manual');
-          setShowScanner(true);
-          return;
-      }
-      setScannerMode('camera');
-      setShowScanner(true);
+    setScanStatus({ type: 'idle', title: '' });
+    setScannerMode('camera');
+    setShowScanner(true);
   };
-
   const closeScanner = () => {
-      setShowScanner(false);
-      setManualScannerInput('');
-      setScanStatus({ type: 'idle', title: '' });
+    setShowScanner(false);
+    setManualScannerInput('');
+    setScanStatus({ type: 'idle', title: '' });
   };
-
-  // Handle Camera Logic
-  useEffect(() => {
-    if (!showScanner || !session || scannerMode !== 'camera' || !canUseBarcodeDetector) {
-        if (intervalRef.current) { window.clearInterval(intervalRef.current); intervalRef.current = null; }
-        if (streamRef.current) { streamRef.current.getTracks().forEach((track) => track.stop()); streamRef.current = null; }
-        setCameraLoading(false);
-        return;
-    }
-
-    setCameraLoading(true);
-    let detector: any;
-    
-    const start = async () => {
-      try {
-        const BarcodeDetectorClass = (window as any).BarcodeDetector;
-        detector = new BarcodeDetectorClass({ formats: ['qr_code'] });
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        streamRef.current = stream;
-        
-        if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            // Wait for video to be ready
-            videoRef.current.onloadedmetadata = () => {
-                videoRef.current?.play().then(() => {
-                    setCameraLoading(false);
-                });
-            };
-        }
-        
-        intervalRef.current = window.setInterval(async () => {
-          if (!videoRef.current || videoRef.current.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-          try {
-            const results = await detector.detect(videoRef.current);
-            if (results && results.length > 0 && results[0].rawValue) {
-              const raw = String(results[0].rawValue || '').trim();
-              const now = Date.now();
-              // Cooldown + de-dup to avoid repeated scans / freezes
-              if (!raw) return;
-              if (isProcessingScanRef.current) return;
-              if (raw === lastScanValueRef.current && (now - lastScanAtRef.current) < 2500) return;
-              isProcessingScanRef.current = true;
-              lastScanValueRef.current = raw;
-              lastScanAtRef.current = now;
-              try {
-                await processQrText(raw);
-                // Keep scanner open but prevent immediate re-scan
-              } finally {
-                window.setTimeout(() => { isProcessingScanRef.current = false; }, 800);
-              }
-            }
-          } catch {}
-        }, 350); 
-      } catch (e) {
-          console.error("Camera error", e);
-          const errName = (e as any)?.name || '';
-          if (errName === 'NotAllowedError') showDriverToast("مجوز دوربین داده نشد", "error");
-          else if (errName === 'NotFoundError') showDriverToast("دوربینی یافت نشد", "error");
-          else showDriverToast("خطا در دسترسی به دوربین", "error");
-          setScannerMode('manual'); // Auto switch to manual on error
-      }
-    };
-    start();
-
-    return () => {
-      if (intervalRef.current) { window.clearInterval(intervalRef.current); intervalRef.current = null; }
-      if (streamRef.current) { streamRef.current.getTracks().forEach((track) => track.stop()); streamRef.current = null; }
-    };
-  }, [showScanner, session, canUseBarcodeDetector, scannerMode]);
 
   // Handle Dashboard Input
   useEffect(() => {
@@ -556,7 +489,7 @@ const DriverAppView: React.FC = () => {
                     {/* Rejection Message - Visible on Step 1 */}
                     {regStep === 1 && error && (
                         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 flex items-start gap-3 animate-in fade-in">
-                            <Icons.AlertTriangle className="text-red-500 shrink-0" />
+                            <Icons.AlertTriangle className="text-red-700 dark:text-red-300 shrink-0" />
                             <div>
                                 <h4 className="text-red-700 font-bold text-sm">درخواست شما رد شده است</h4>
                                 <p className="text-red-600 text-xs mt-1 leading-5">{error.replace('درخواست قبلی شما رد شد. علت: ', '')}</p>
@@ -737,8 +670,8 @@ const DriverAppView: React.FC = () => {
                                             <img src={(regData.documents as any)['nationalCard']} className="w-full h-full object-cover" alt="National Card" />
                                         ) : (
                                             <div className="text-center p-4">
-                                                <Icons.UploadCloud size={28} className="mx-auto text-gray-400 mb-2" />
-                                                <span className="text-[10px] text-gray-400 block font-medium">برای بارگذاری کلیک کنید</span>
+                                                <Icons.UploadCloud size={28} className="mx-auto text-gray-600 dark:text-gray-400 mb-2" />
+                                                <span className="text-[10px] text-gray-600 dark:text-gray-400 block font-medium">برای بارگذاری کلیک کنید</span>
                                             </div>
                                         )}
                                         <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleFileChange(e, 'nationalCard')} />
@@ -753,8 +686,8 @@ const DriverAppView: React.FC = () => {
                                             <img src={(regData.documents as any)['licenseCard']} className="w-full h-full object-cover" alt="License Card" />
                                         ) : (
                                             <div className="text-center p-4">
-                                                <Icons.UploadCloud size={28} className="mx-auto text-gray-400 mb-2" />
-                                                <span className="text-[10px] text-gray-400 block font-medium">برای بارگذاری کلیک کنید</span>
+                                                <Icons.UploadCloud size={28} className="mx-auto text-gray-600 dark:text-gray-400 mb-2" />
+                                                <span className="text-[10px] text-gray-600 dark:text-gray-400 block font-medium">برای بارگذاری کلیک کنید</span>
                                             </div>
                                         )}
                                         <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleFileChange(e, 'licenseCard')} />
@@ -769,8 +702,8 @@ const DriverAppView: React.FC = () => {
                                             <img src={(regData.documents as any)['carCard']} className="w-full h-full object-cover" alt="Car Card" />
                                         ) : (
                                             <div className="text-center p-4">
-                                                <Icons.UploadCloud size={28} className="mx-auto text-gray-400 mb-2" />
-                                                <span className="text-[10px] text-gray-400 block font-medium">برای بارگذاری کلیک کنید</span>
+                                                <Icons.UploadCloud size={28} className="mx-auto text-gray-600 dark:text-gray-400 mb-2" />
+                                                <span className="text-[10px] text-gray-600 dark:text-gray-400 block font-medium">برای بارگذاری کلیک کنید</span>
                                             </div>
                                         )}
                                         <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleFileChange(e, 'carCard')} />
@@ -862,10 +795,10 @@ const DriverAppView: React.FC = () => {
            <div className="flex-1 px-8 -mt-8">
               <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 p-6">
                  <form onSubmit={handleLogin} noValidate className="space-y-4">
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center"><Icons.User className="text-gray-400 ml-3" size={20} /><input type="text" placeholder="نام کاربری" className="bg-transparent w-full text-sm font-bold text-gray-800 outline-none" value={username} onChange={(e) => setUsername(toEnglishDigits(e.target.value))} inputMode="text" autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="username" /></div>
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center"><Icons.Lock className="text-gray-400 ml-3" size={20} /><input type="password" placeholder="رمز عبور" className="bg-transparent w-full text-sm font-bold text-gray-800 outline-none" value={password} onChange={(e) => setPassword(toEnglishDigits(e.target.value))} autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="current-password" /></div>
-                    {error && <div className="text-red-500 text-xs font-bold text-center">{error}</div>}
-                    <button type="submit" className="w-full bg-vira-primary text-white font-bold text-lg py-4 rounded-xl shadow-lg hover:bg-vira-secondary transition-all mt-6">ورود به پنل</button>
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center"><Icons.User className="text-gray-600 dark:text-gray-400 ml-3" size={20} /><input type="text" aria-label="نام کاربری راننده" placeholder="نام کاربری" className="bg-transparent w-full text-sm font-bold text-gray-800 outline-none" value={username} onChange={(e) => setUsername(toEnglishDigits(e.target.value))} inputMode="text" autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="username" /></div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center"><Icons.Lock className="text-gray-600 dark:text-gray-400 ml-3" size={20} /><input type="password" aria-label="رمز عبور راننده" placeholder="رمز عبور" className="bg-transparent w-full text-sm font-bold text-gray-800 outline-none" value={password} onChange={(e) => setPassword(toEnglishDigits(e.target.value))} autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="current-password" /></div>
+                    {error && <div className="text-red-700 dark:text-red-300 text-xs font-bold text-center">{error}</div>}
+                    <button type="submit" disabled={loginSubmitting} className="w-full bg-vira-primary text-white font-bold text-lg py-4 rounded-xl shadow-lg hover:bg-vira-secondary transition-all mt-6">ورود به پنل</button>
                  </form>
                  
                  <div className="mt-6 pt-4 border-t border-gray-100 text-center">
@@ -884,10 +817,10 @@ const DriverAppView: React.FC = () => {
         {showLegal && (
           <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center">
             <div className="absolute inset-0" onClick={() => setShowLegal(false)} />
-            <div className="relative z-10 bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[75vh] overflow-hidden border border-gray-200">
+            <div ref={legalDialog} role="dialog" aria-modal="true" aria-label="قوانین راننده" tabIndex={-1} className="relative z-10 bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[75vh] overflow-hidden border border-gray-200">
               <div className="p-4 border-b border-gray-100 flex items-center justify-between">
                 <div className="font-black text-gray-800">قوانین و مقررات راننده</div>
-                <button type="button" onClick={() => setShowLegal(false)} className="p-2 rounded-xl bg-gray-100 text-gray-600"><Icons.X size={16} /></button>
+                <button type="button" aria-label="بستن قوانین" onClick={() => setShowLegal(false)} className="p-2 rounded-xl bg-gray-100 text-gray-600"><Icons.X size={16} /></button>
               </div>
               <div className="p-4 overflow-y-auto text-sm leading-7 whitespace-pre-wrap text-gray-700">
                 {legalLoading ? 'در حال دریافت...' : legalContent}
@@ -899,76 +832,30 @@ const DriverAppView: React.FC = () => {
   ); }
 
   return (
-    <div className="h-screen w-full overflow-hidden bg-gray-50 text-gray-800 relative" dir="rtl">
+    <div className="h-[100dvh] w-full overflow-hidden bg-gray-50 text-gray-800 relative" dir="rtl">
       
       {/* Toast - Rendered here to be accessible generally */}
       {!showScanner && <Toast message={toast.message} type={toast.type} visible={toast.visible} onClose={closeToast} duration={3000} />}
 
       {/* FULL SCREEN SCANNER OVERLAY */}
       {showScanner && (
-      <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center animate-in fade-in duration-300">
-              {/* Internal Toast for Overlay - High Z-Index */}
-              <div className="absolute top-0 w-full z-[120] flex justify-center pt-6 pointer-events-none">
-                  <Toast message={toast.message} type={toast.type} visible={toast.visible} onClose={closeToast} duration={2500} />
-              </div>
-
+      <div ref={scannerDialog} role="dialog" aria-modal="true" aria-label="اسکن بلیط مسافر" tabIndex={-1} className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center animate-in fade-in duration-300">
               <button 
                   onClick={closeScanner}
+                  aria-label="بستن اسکنر"
                   className="absolute top-6 right-6 z-50 bg-white/20 p-3 rounded-full text-white hover:bg-white/40 backdrop-blur-md transition-colors"
               >
                   <Icons.X size={24} />
               </button>
               
+              {scannerMode === 'camera' && scanStatus.type !== 'idle' && (
+                <div role="status" aria-live="polite" className={`absolute top-24 z-30 mx-4 rounded-2xl px-5 py-4 text-center shadow-xl text-white ${scanStatus.type === 'success' ? 'bg-emerald-700' : scanStatus.type === 'error' ? 'bg-red-700' : 'bg-slate-800'}`}>
+                  <div className="font-bold">{scanStatus.title}</div>
+                  {scanStatus.detail && <div className="text-sm mt-2">{scanStatus.detail}</div>}
+                </div>
+              )}
               {scannerMode === 'camera' ? (
-                  <div className="relative w-full h-full flex flex-col">
-                      <div className="flex-1 relative overflow-hidden bg-black">
-                          {cameraLoading && (
-                              <div className="absolute inset-0 flex items-center justify-center text-white/50 gap-2">
-                                  <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
-                                  <span>راه‌اندازی دوربین...</span>
-                              </div>
-                          )}
-                          {scanStatus.type !== 'idle' && (
-                            <div className={`absolute top-6 left-1/2 -translate-x-1/2 z-20 max-w-[92vw] rounded-2xl px-4 py-3 text-center shadow-xl backdrop-blur border ${
-                              scanStatus.type === 'success'
-                                ? 'bg-emerald-500/90 text-white border-emerald-300'
-                                : scanStatus.type === 'error'
-                                  ? 'bg-red-500/90 text-white border-red-300'
-                                  : 'bg-black/70 text-white border-white/10'
-                            }`}>
-                              <div className="font-black text-sm">{scanStatus.title}</div>
-                              {scanStatus.detail && <div className="mt-1 text-[11px] opacity-90">{scanStatus.detail}</div>}
-                            </div>
-                          )}
-                          <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" muted playsInline />
-                          
-                          {/* Scanning Frame Overlay */}
-                          <div className="absolute inset-0 border-[50px] border-black/50 pointer-events-none flex items-center justify-center">
-                              <div className="w-72 h-72 border-4 border-vira-primary rounded-3xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] bg-transparent overflow-hidden">
-                                  <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-4 py-1.5 rounded-full backdrop-blur-md font-bold whitespace-nowrap">
-                                      کد QR مسافر را اینجا قرار دهید
-                                  </div>
-                                  <div className="absolute top-0 left-0 w-full h-1 bg-vira-primary shadow-[0_0_15px_#3674B5] animate-[scan_2s_infinite_linear]"></div>
-                                  {/* Corner Accents */}
-                                  <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-xl opacity-50"></div>
-                                  <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-xl opacity-50"></div>
-                                  <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl-xl opacity-50"></div>
-                                  <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-white rounded-br-xl opacity-50"></div>
-                              </div>
-                          </div>
-                      </div>
-                      
-                      {/* Bottom Action Area */}
-                      <div className="bg-black p-6 pb-12 pt-4 flex justify-center">
-                          <button 
-                             onClick={() => setScannerMode('manual')}
-                             className="w-full max-w-xs bg-white/10 border border-white/20 text-white rounded-2xl py-4 flex items-center justify-center gap-2 active:bg-white/20 transition-all"
-                          >
-                              <Icons.Key size={20} />
-                              <span className="font-bold">اسکن نشد؟ کد ۴ رقمی را وارد کنید</span>
-                          </button>
-                      </div>
-                  </div>
+                  <TicketCameraScanner onScan={processQrText} onManual={() => setScannerMode('manual')} />
               ) : (
                   <div className="relative w-full h-full flex flex-col items-center justify-center p-6 bg-black">
                       <div className="w-full max-w-sm space-y-6">
@@ -995,6 +882,8 @@ const DriverAppView: React.FC = () => {
                           <div className="relative">
                               <input 
                                   ref={manualInputRef}
+                                  aria-label="کد ۴ رقمی بلیط"
+                                  disabled={scanStatus.type === 'loading'}
                                   value={manualScannerInput} 
                                   onChange={(e) => setManualScannerInput(toEnglishDigits(e.target.value))} 
                                   placeholder="- - - -" 
@@ -1020,6 +909,7 @@ const DriverAppView: React.FC = () => {
       )}
 
       <div className="h-full overflow-y-auto p-4 md:p-6 pb-28">
+      {dashboardError && <div role="alert" className="max-w-4xl mx-auto mb-4 rounded-2xl p-4 bg-red-50 text-red-800 border border-red-200 flex flex-wrap items-center justify-between gap-3"><span>{dashboardError}</span><button type="button" className="font-bold underline" onClick={() => refreshData(session.id)}>تلاش دوباره</button></div>}
       {driverPage === 'dashboard' && (
       <div className="max-w-4xl mx-auto space-y-4">
         <div className="bg-white border border-gray-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
@@ -1032,7 +922,7 @@ const DriverAppView: React.FC = () => {
               <div className="text-xs text-gray-500 font-bold">{session.licensePlate}</div>
             </div>
           </div>
-          <button onClick={handleLogout} className="text-xs bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-1">
+          <button onClick={handleLogout} className="text-xs bg-red-50 hover:bg-red-100 text-red-700 dark:text-red-300 border border-red-100 px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-1">
              <Icons.LogOut size={14} />
              خروج
           </button>
@@ -1044,14 +934,14 @@ const DriverAppView: React.FC = () => {
                <div className="text-sm text-gray-500 mb-1">مسافر سوار شده</div>
                <div className="text-3xl font-black text-gray-800">{summary.boardedCount}</div>
             </div>
-            <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center"><Icons.Users size={20} /></div>
+            <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-700 dark:text-blue-300 flex items-center justify-center"><Icons.Users size={20} /></div>
           </div>
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm flex items-center justify-between">
             <div>
                <div className="text-sm text-gray-500 mb-1">درآمد خالص امروز (تومان)</div>
                <div className="text-3xl font-black text-vira-primary">{formatAmountFa(summary.totalRevenue)}</div>
             </div>
-            <div className="w-10 h-10 rounded-full bg-green-50 text-green-500 flex items-center justify-center"><Icons.Wallet size={20} /></div>
+            <div className="w-10 h-10 rounded-full bg-green-50 text-green-700 dark:text-green-300 flex items-center justify-center"><Icons.Wallet size={20} /></div>
           </div>
         </div>
 
@@ -1076,7 +966,7 @@ const DriverAppView: React.FC = () => {
                 <span className="text-xs text-white/80 relative z-10">برای باز کردن اسکنر تمام صفحه کلیک کنید</span>
             </button>
             
-            {!canUseBarcodeDetector && <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded-lg mt-3 text-center border border-amber-100">مرورگر شما اسکن خودکار را پشتیبانی نمی‌کند.</div>}
+
           </div>
 
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
@@ -1086,7 +976,7 @@ const DriverAppView: React.FC = () => {
             </h2>
             <div className="py-2">
                <input 
-                  value={codeInput} 
+                  aria-label="کد ۴ رقمی بلیط" disabled={scanStatus.type === 'loading'} value={codeInput}
                   onChange={(e) => setCodeInput(toEnglishDigits(e.target.value))} 
                   placeholder="----" 
                   maxLength={4} 
@@ -1094,7 +984,7 @@ const DriverAppView: React.FC = () => {
                   dir="ltr"
                />
             </div>
-            <p className="text-xs text-gray-400 text-center leading-5">
+            <p className="text-xs text-gray-600 dark:text-gray-400 text-center leading-5">
                در صورت خرابی دوربین، کد ۴ رقمی بلیط مسافر را وارد کنید.
             </p>
           </div>
@@ -1142,7 +1032,7 @@ const DriverAppView: React.FC = () => {
                 </div>
                 <div className="text-left">
                   <div className="text-sm font-bold text-vira-primary">{formatTomanFa(scan.amount)}</div>
-                  <div className="text-xs text-gray-400 mt-1">{new Date(scan.scannedAt).toLocaleTimeString('fa-IR')}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{new Date(scan.scannedAt).toLocaleTimeString('fa-IR')}</div>
                 </div>
               </div>
             ))}
@@ -1169,7 +1059,7 @@ const DriverAppView: React.FC = () => {
               <span className="font-black text-xl relative z-10">اسکن با دوربین</span>
               <span className="text-xs text-white/80 relative z-10">برای شروع اسکن لمس کنید</span>
             </button>
-            {!canUseBarcodeDetector && <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded-lg mt-3 text-center border border-amber-100">مرورگر شما اسکن خودکار را پشتیبانی نمی‌کند.</div>}
+
           </div>
 
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
@@ -1179,7 +1069,7 @@ const DriverAppView: React.FC = () => {
             </h2>
             <div className="py-2">
               <input
-                value={codeInput}
+                aria-label="کد ۴ رقمی بلیط" disabled={scanStatus.type === 'loading'} value={codeInput}
                 onChange={(e) => setCodeInput(toEnglishDigits(e.target.value))}
                 placeholder="----"
                 maxLength={4}
@@ -1188,7 +1078,7 @@ const DriverAppView: React.FC = () => {
                 inputMode="numeric"
               />
             </div>
-            <p className="text-xs text-gray-400 text-center leading-5">در صورت مشکل دوربین، کد ۴ رقمی بلیط مسافر را وارد کنید.</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 text-center leading-5">در صورت مشکل دوربین، کد ۴ رقمی بلیط مسافر را وارد کنید.</p>
           </div>
         </div>
       )}
@@ -1238,7 +1128,7 @@ const DriverAppView: React.FC = () => {
               وضعیت درخواست‌ها
             </h2>
             {routeLoading ? (
-              <div className="text-center text-gray-400 py-10 text-sm font-bold">در حال دریافت...</div>
+              <div className="text-center text-gray-600 dark:text-gray-400 py-10 text-sm font-bold">در حال دریافت...</div>
             ) : (
               <div className="space-y-3">
                 {routeRequests.map(r => (
@@ -1259,7 +1149,7 @@ const DriverAppView: React.FC = () => {
                     </div>
                   </div>
                 ))}
-                {routeRequests.length === 0 && <div className="text-center text-gray-400 py-10 text-sm font-bold">درخواستی ثبت نشده است.</div>}
+                {routeRequests.length === 0 && <div className="text-center text-gray-600 dark:text-gray-400 py-10 text-sm font-bold">درخواستی ثبت نشده است.</div>}
               </div>
             )}
           </div>
@@ -1275,19 +1165,19 @@ const DriverAppView: React.FC = () => {
             </h2>
             <div className="grid md:grid-cols-2 gap-3">
               <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4">
-                <div className="text-xs text-gray-400 font-bold">نام</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 font-bold">نام</div>
                 <div className="font-black text-gray-800 mt-1">{session.name}</div>
               </div>
               <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4">
-                <div className="text-xs text-gray-400 font-bold">نام کاربری</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 font-bold">نام کاربری</div>
                 <div className="font-black text-gray-800 mt-1">{session.username}</div>
               </div>
               <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4">
-                <div className="text-xs text-gray-400 font-bold">پلاک</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 font-bold">پلاک</div>
                 <div className="font-black text-gray-800 mt-1 dir-ltr text-right">{session.licensePlate}</div>
               </div>
               <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4">
-                <div className="text-xs text-gray-400 font-bold">تلفن</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 font-bold">تلفن</div>
                 <div className="font-black text-gray-800 mt-1 dir-ltr text-right">{session.phone || '-'}</div>
               </div>
             </div>

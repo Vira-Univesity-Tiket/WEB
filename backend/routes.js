@@ -1,8 +1,9 @@
 
 import express from 'express';
-import { handleAdminLogin, handleLogin, handleRegister, handleUpdateProfile } from './controllers/authController.js';
+import { handleAdminLogin, handleLogin, handleRegister, handleUpdateProfile, handleCurrentUser } from './controllers/authController.js';
 import { handleGetUsers, handleTopUpUser, handleUpdateUser, handleDeleteUser, handleToggleUserStatus } from './controllers/adminController.js';
 import { handleGetTickets, handleReserveTicket } from './controllers/ticketController.js';
+import { handleTicketFeedback, handleListTicketFeedback, handleReviewTicketFeedback } from './controllers/ticketFeedbackController.js';
 import { handleGetBusSchedule, handleChat } from './controllers/tripController.js';
 import { handleGetTransactions, handleTopUpDeprecated, handleTopUpInitiate, handleTopUpCallback, handleTopUpStatus, handleSupportTicket } from './controllers/walletController.js';
 import { handleHealth } from './controllers/healthController.js';
@@ -86,12 +87,14 @@ import {
   handleUpdateAnalyst
 } from './controllers/adminAccountController.js';
 import { handleGetLegalContent, handleUpsertLegalContent } from './controllers/legalController.js';
-import { authenticate, createRateLimiter, enforceReadOnlyRole, optionalAuth, requireRole } from './security.js';
+import { authenticate as authenticateToken, createRateLimiter, enforceReadOnlyRole, optionalAuth, requireRole } from './security.js';
+import { requireActiveAccount } from './accountAccess.js';
 
 const router = express.Router();
+const authenticate = [authenticateToken, requireActiveAccount];
 const authLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 40, keyPrefix: 'auth' });
-const writeLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyPrefix: 'write' });
-const financeLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 20, keyPrefix: 'finance' });
+const writeLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyPrefix: 'write', keyResolver: req => req.auth ? `${req.auth.role}:${req.auth.sub}` : req.ip });
+const financeLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 20, keyPrefix: 'finance', keyResolver: req => req.auth ? `${req.auth.role}:${req.auth.sub}` : req.ip });
 const ideaLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 12, keyPrefix: 'idea' });
 const paymentInitLimiter = createRateLimiter({
   windowMs: 60 * 1000,
@@ -109,6 +112,7 @@ const paymentCallbackLimiter = createRateLimiter({
 // Auth
 router.post('/auth/login', authLimiter, handleLogin);
 router.post('/auth/register', authLimiter, handleRegister);
+router.get('/auth/me', authenticate, requireRole('user'), handleCurrentUser);
 router.post('/auth/update-profile', authenticate, requireRole('user'), handleUpdateProfile);
 router.post('/admin/login', authLimiter, handleAdminLogin);
 router.use('/admin', authenticate, requireRole('admin', 'analyst'), enforceReadOnlyRole('analyst'));
@@ -146,9 +150,12 @@ router.get('/support/tickets/:ticketId/txt', authenticate, requireRole('user', '
 router.get('/support/attachments/:attachmentId/download', authenticate, requireRole('user', 'admin'), handleDownloadSupportAttachment);
 router.get('/tickets', authenticate, requireRole('user'), handleGetTickets);
 router.post('/tickets/reserve', authenticate, requireRole('user'), writeLimiter, handleReserveTicket);
+router.post('/tickets/:ticketId/feedback', authenticate, requireRole('user'), writeLimiter, handleTicketFeedback);
 
 // --- Admin Users ---
 router.get('/admin/users', handleGetUsers);
+router.get('/admin/tickets/feedback', handleListTicketFeedback);
+router.post('/admin/tickets/:ticketId/feedback/status', requireRole('admin'), writeLimiter, handleReviewTicketFeedback);
 router.post('/admin/topup', requireRole('admin'), financeLimiter, handleTopUpUser);
 router.put('/admin/users/:userId', requireRole('admin'), writeLimiter, handleUpdateUser);
 router.put('/admin/users/:userId/status', requireRole('admin'), writeLimiter, handleToggleUserStatus);

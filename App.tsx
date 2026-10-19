@@ -18,7 +18,7 @@ const AdminDashboardView = lazy(() => import('./views/AdminDashboardView'));
 const DriverAppView = lazy(() => import('./views/DriverAppView'));
 
 const PageLoader = () => (
-  <div className="flex items-center justify-center h-screen bg-gray-100">
+  <div role="status" aria-label="در حال بارگذاری صفحه" className="flex items-center justify-center h-full min-h-[40dvh] bg-gray-100">
     <div className="w-10 h-10 border-4 border-vira-primary border-t-transparent rounded-full animate-spin"></div>
   </div>
 );
@@ -100,6 +100,7 @@ const App: React.FC = () => {
               busOptions={state.busOptions}
               selectedBus={state.selectedBus}
               loading={state.loadingSchedule}
+              bookingPending={state.bookingPending}
               mapRef={refs.mapRef}
               onBack={actions.goHome}
               onLocate={actions.locateUser}
@@ -110,8 +111,8 @@ const App: React.FC = () => {
               onRefresh={actions.refreshSchedule}
               onProfile={actions.goToProfile}
               onFinishTrip={actions.initiateRating}
-              ticketId={state.tickets.find((ticket) => ticket.status === 'active')?.id}
-              currentTicket={state.tickets.find((ticket) => ticket.status === 'active')}
+              ticketId={state.issuedTicket?.id}
+              currentTicket={state.issuedTicket || undefined}
               stations={state.stations}
             />
           )}
@@ -152,10 +153,10 @@ const App: React.FC = () => {
         <div className="absolute inset-0 z-50 bg-white dark:bg-slate-900 flex flex-col">
           <div className="p-4 border-b dark:border-slate-800 flex items-center justify-between">
             <div className="flex flex-col">
-                <h3 className="font-bold text-gray-800 dark:text-white">پشتیبانی آنلاین</h3>
-                <span className="text-[10px] text-gray-500 font-bold flex items-center gap-1">Online</span>
+                <h3 className="font-bold text-gray-800 dark:text-white">راهنمای خودکار</h3>
+                <span className="text-[10px] text-gray-500 font-bold flex items-center gap-1">پاسخ‌گوی خودکار</span>
             </div>
-            <button onClick={() => actions.setChatOpen(false)} className="p-2 bg-gray-100 dark:bg-slate-800 rounded-full">
+            <button aria-label="بستن گفتگو" onClick={() => actions.setChatOpen(false)} className="p-2 bg-gray-100 dark:bg-slate-800 rounded-full">
               <span className="text-xl">&times;</span>
             </button>
           </div>
@@ -190,7 +191,7 @@ const App: React.FC = () => {
             <div className="flex gap-2">
               <input
                 className="flex-1 bg-gray-100 dark:bg-slate-800 rounded-xl px-4 py-3 text-sm outline-none text-gray-800 dark:text-white"
-                placeholder="پیام خود را بنویسید..."
+                aria-label="پیام به راهنمای خودکار" placeholder="پیام خود را بنویسید..."
                 value={state.inputMsg}
                 onChange={(e) => actions.setInputMsg(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && actions.sendMessage()}

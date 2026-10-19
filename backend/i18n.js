@@ -1,3 +1,4 @@
+import { logError } from './logging.js';
 const faMessages = {
   AUTH_REQUIRED: 'برای ادامه، ورود به حساب کاربری الزامی است.',
   FORBIDDEN: 'شما مجوز انجام این عملیات را ندارید.',
@@ -195,7 +196,7 @@ export const notFoundPayload = (req) => ({
 });
 
 export const errorHandler = (err, _req, res, _next) => {
-  console.error('Unhandled API error:', err);
+  logError('Unhandled API error', err);
   if (res.headersSent) return;
   if (err?.message === 'CORS blocked for this origin') {
     return res.status(403).json({ error: t('CORS_BLOCKED'), code: 'CORS_BLOCKED' });

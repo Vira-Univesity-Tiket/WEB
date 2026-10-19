@@ -1,5 +1,5 @@
 
-import { AdminAccount, AdminUser, AdminIdea, BusOption, Driver, IdeaStatusHistoryItem, Station, Transaction, UserIdea, UserProfile, BusSchedule, FinanceRecord, SystemSettings, DriverRequest, AppNotification, DriverRouteRequest, TicketFeedbackItem } from '../types';
+import { AdminAccount, AdminUser, AdminIdea, BusOption, Driver, IdeaStatusHistoryItem, Station, Transaction, UserIdea, UserProfile, BusSchedule, FinanceRecord, SystemSettings, DriverRequest, AppNotification, DriverRouteRequest, TicketFeedbackItem, Ticket } from '../types';
 import type { SupportTicketDetail, SupportTicketListItem, SupportTicketStatus } from '../types';
 import { buildApiUrl, getApiRetryCount, initializeFrontendConfig } from '../config/frontend-config';
 
@@ -37,6 +37,12 @@ export const hasDriverAuthToken = (): boolean => {
   if (typeof window === 'undefined') return false;
   return Boolean(localStorage.getItem(DRIVER_TOKEN_KEY));
 };
+
+export const clearDriverAuthToken = () => localStorage.removeItem(DRIVER_TOKEN_KEY);
+
+export class ApiError extends Error {
+  constructor(message: string, public status: number) { super(message); this.name = 'ApiError'; }
+}
 
 const getTokenForResource = (resource: string) => {
   if (typeof window === 'undefined') return '';
@@ -110,7 +116,11 @@ const isAbsoluteUrl = (value: string) => /^https?:\/\//i.test(value);
 const resolveResourceUrl = (resource: string) => {
   const raw = String(resource || '').trim();
   if (!raw) return buildApiUrl('/');
-  if (isAbsoluteUrl(raw)) return raw;
+  if (isAbsoluteUrl(raw)) {
+    const url = new URL(raw);
+    if (typeof window === 'undefined' || url.origin !== window.location.origin) throw new Error('آدرس API باید در همین دامنه باشد.');
+    return url.pathname + url.search;
+  }
   const path = raw.startsWith('/') ? raw : `/${raw}`;
   return buildApiUrl(path);
 };
@@ -167,18 +177,18 @@ const fetchWithTimeout = async (resource: string, options: FetchOptions = {}) =>
     } catch (error) {
       clearTimeout(id);
       const errorName = (error as any)?.name;
-      if (attempt < maxRetries && errorName !== 'AbortError') {
+      if (canRetryResponse && attempt < maxRetries && errorName !== 'AbortError') {
         await delay(150 * (attempt + 1));
         continue;
       }
       if (errorName === 'AbortError') {
-        throw new Error('زمان پاسخ‌گویی سرور به پایان رسید. لطفاً دوباره تلاش کنید.');
+        throw new Error('زمان پاسخ‌گویی سرور به پایان رسید. لطفاً دوباره تلاش کنید.', { cause: error });
       }
       const message = (error as any)?.message;
       if (message) {
-        throw new Error(normalizeErrorMessage(String(message), 'ارتباط با سرور برقرار نشد.'));
+        throw new Error(normalizeErrorMessage(String(message), 'ارتباط با سرور برقرار نشد.'), { cause: error });
       }
-      throw new Error('ارتباط با سرور برقرار نشد.');
+      throw new Error('ارتباط با سرور برقرار نشد.', { cause: error });
     }
   }
   throw new Error('ارتباط با سرور برقرار نشد.');
@@ -206,7 +216,7 @@ const asJson = async <T>(response: Response, fallbackMessage: string): Promise<T
         snippet: raw.slice(0, 120)
       });
     }
-    throw new Error(normalizeErrorMessage(message, fallbackMessage));
+    throw new ApiError(normalizeErrorMessage(message, fallbackMessage), response.status);
   }
 
   if (!json) {
@@ -232,7 +242,8 @@ export const loginAPI = async (studentId: string, nationalCode: string): Promise
   });
   const data = await asJson<UserProfile & { authToken?: string; token?: string }>(response, 'ورود با خطا مواجه شد');
   saveToken(USER_TOKEN_KEY, data.authToken || data.token);
-  return data;
+  const { authToken: _authToken, token: _token, ...profile } = data;
+  return profile;
 };
 
 export const registerAPI = async (name: string, studentId: string, nationalCode: string): Promise<UserProfile> => {
@@ -241,8 +252,11 @@ export const registerAPI = async (name: string, studentId: string, nationalCode:
   });
   const data = await asJson<UserProfile & { authToken?: string; token?: string }>(response, 'ثبت نام با خطا مواجه شد');
   saveToken(USER_TOKEN_KEY, data.authToken || data.token);
-  return data;
+  const { authToken: _authToken, token: _token, ...profile } = data;
+  return profile;
 };
+
+export const getCurrentUserAPI = async (): Promise<UserProfile> => asJson(await fetchWithTimeout('/auth/me'), 'دریافت اطلاعات حساب ناموفق بود');
 
 export const adminLoginAPI = async (username: string, password: string): Promise<{ success: boolean; role?: 'admin' | 'analyst'; username?: string; authToken?: string; token?: string }> => {
   const response = await fetchWithTimeout(`/admin/login`, {
@@ -527,22 +541,22 @@ export const getWalletTopupStatus = async (transactionId: string): Promise<{
   return asJson(response, 'دریافت وضعیت پرداخت ناموفق بود');
 };
 
-export const reserveTicket = async (payload: any): Promise<{ balance: number; ticket?: any; tickets?: any[]; transaction: Transaction }> => {
+export const reserveTicket = async (payload: any, requestKey: string): Promise<{ balance: number; ticket?: Ticket; tickets?: Ticket[]; transaction: Transaction }> => {
   const response = await fetchWithTimeout(`/tickets/reserve`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestKey },
     body: JSON.stringify(payload)
   });
   return asJson(response, 'رزرو بلیط با خطا مواجه شد');
 };
 
-export const submitTicketFeedback = async (ticketId: string, payload: { rating: number; comment: string }) => {
+export const submitTicketFeedback = async (ticketId: string, payload: { rating: number; comment: string }): Promise<{ success: boolean; ticket: Ticket }> => {
   const response = await fetchWithTimeout(`/tickets/${encodeURIComponent(ticketId)}/feedback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  return asJson(response, 'ثبت نظر ناموفق بود');
+  return asJson<{ success: boolean; ticket: Ticket }>(response, 'ثبت نظر ناموفق بود');
 };
 
 export const getUserTickets = async (studentId: string) => {
@@ -618,7 +632,7 @@ export const downloadAuthenticatedFile = async (url: string, fallbackFilename: s
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
   const disposition = response.headers.get('content-disposition') || '';
-  const filenameMatch = disposition.match(/filename\*?=(?:UTF-8'')?\"?([^\";]+)\"?/i);
+  const filenameMatch = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
   const fileName = filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : fallbackFilename;
   link.href = objectUrl;
   link.download = fileName;
@@ -721,6 +735,7 @@ export interface DriverScanItem {
   amount: number;
   scannedAt: string;
   method: 'qr' | 'code';
+  count?: number;
 }
 
 export interface DriverScheduleCard {
@@ -742,7 +757,8 @@ export const driverLogin = async (username: string, password: string): Promise<D
   });
   const data = await asJson<any>(response, 'ورود راننده ناموفق بود');
   if (data?.status === 'active') saveToken(DRIVER_TOKEN_KEY, data.authToken || data.token);
-  return data;
+  const { authToken: _authToken, token: _token, ...session } = data;
+  return session;
 };
 
 export const driverRegister = async (payload: any): Promise<{ success: boolean }> => {

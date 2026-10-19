@@ -59,7 +59,6 @@ const SupportView: React.FC<SupportViewProps> = ({ onBack }) => {
 
   useEffect(() => {
     if (mode === 'list') loadTickets();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, mode]);
 
   const openTicket = async (id: string) => {
@@ -78,7 +77,11 @@ const SupportView: React.FC<SupportViewProps> = ({ onBack }) => {
   };
 
   const readFiles = async (fileList: FileList, set: React.Dispatch<React.SetStateAction<{ name: string; dataUrl: string }[]>>) => {
-    const arr = Array.from(fileList).slice(0, 5);
+    const previous = set === setReplyFiles ? replyFiles : files;
+    const arr = Array.from(fileList);
+    if (arr.length + previous.length > 5) { setMessage('حداکثر ۵ فایل برای هر پیام مجاز است.'); return; }
+    const existingBytes = previous.reduce((total, file) => total + (file.dataUrl.split(',')[1]?.length || 0) * 0.75, 0);
+    if (existingBytes + arr.reduce((total, file) => total + file.size, 0) > 8 * 1024 * 1024) { setMessage('مجموع فایل‌های هر پیام باید حداکثر ۸ مگابایت باشد.'); return; }
     const results: { name: string; dataUrl: string }[] = [];
 
     for (const f of arr) {
@@ -194,7 +197,7 @@ const SupportView: React.FC<SupportViewProps> = ({ onBack }) => {
     <div className="flex flex-col h-full overflow-hidden bg-gray-50 dark:bg-slate-950 font-sans transition-colors duration-200" dir="rtl">
       <div className="bg-white dark:bg-slate-900 p-4 flex items-center justify-between shadow-sm sticky top-0 z-20 border-b dark:border-slate-800 flex-none">
         <div className="flex items-center gap-3">
-          <button
+          <button aria-label="بازگشت"
             onClick={() => {
               if (mode === 'detail' || mode === 'create') { setMode('list'); setSelected(null); return; }
               onBack();
@@ -207,7 +210,7 @@ const SupportView: React.FC<SupportViewProps> = ({ onBack }) => {
             <h2 className="text-lg font-bold text-gray-800 dark:text-white">{headerTitle}</h2>
             {mode === 'detail' && selected && (
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[11px] text-gray-400 font-bold">#{toEnglishDigits(selected.id)}</span>
+                <span className="text-[11px] text-gray-600 dark:text-gray-400 font-bold">#{toEnglishDigits(selected.id)}</span>
                 {ticketBadge(selected.status)}
               </div>
             )}
@@ -219,7 +222,7 @@ const SupportView: React.FC<SupportViewProps> = ({ onBack }) => {
       {message && (
         <div className="px-4 pt-3">
           <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-3 text-sm text-gray-700 dark:text-gray-200 flex items-start gap-2">
-            <Icons.Info size={18} className="text-blue-500 mt-0.5 shrink-0" />
+            <Icons.Info size={18} className="text-blue-700 dark:text-blue-300 mt-0.5 shrink-0" />
             <div className="leading-6">{message}</div>
           </div>
         </div>
@@ -243,17 +246,17 @@ const SupportView: React.FC<SupportViewProps> = ({ onBack }) => {
           </div>
 
           {loading ? (
-            <div className="py-10 text-center text-gray-400">
+            <div className="py-10 text-center text-gray-600 dark:text-gray-400">
               <div className="inline-block w-8 h-8 border-4 border-vira-primary border-t-transparent rounded-full animate-spin mb-3" />
               <div className="text-sm font-bold">در حال دریافت...</div>
             </div>
           ) : tickets.length === 0 ? (
             <div className="py-14 text-center bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800">
-              <div className="w-16 h-16 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-400">
+              <div className="w-16 h-16 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-600 dark:text-gray-400">
                 <Icons.Headset size={28} />
               </div>
               <div className="text-sm font-bold text-gray-600 dark:text-gray-200">{listEmptyText}</div>
-              <div className="text-xs text-gray-400 mt-1">برای شروع، یک تیکت جدید ثبت کنید.</div>
+              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">برای شروع، یک تیکت جدید ثبت کنید.</div>
             </div>
           ) : (
             <div className="space-y-3">
@@ -266,13 +269,13 @@ const SupportView: React.FC<SupportViewProps> = ({ onBack }) => {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
                       <div className="font-black text-gray-800 dark:text-white text-sm">{t.title}</div>
-                      <div className="text-[11px] text-gray-400 mt-1">
+                      <div className="text-[11px] text-gray-600 dark:text-gray-400 mt-1">
                         ثبت: {new Date(t.createdAt).toLocaleString('fa-IR')}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       {ticketBadge(t.status)}
-                      <span className="text-[11px] text-gray-400 font-bold">#{toEnglishDigits(t.id)}</span>
+                      <span className="text-[11px] text-gray-600 dark:text-gray-400 font-bold">#{toEnglishDigits(t.id)}</span>
                     </div>
                   </div>
                 </button>
@@ -309,7 +312,7 @@ const SupportView: React.FC<SupportViewProps> = ({ onBack }) => {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-gray-500">فایل‌های ضمیمه (اختیاری)</label>
-                <span className="text-[10px] text-gray-400">حداکثر ۵ فایل، هر فایل ۵MB</span>
+                <span className="text-[10px] text-gray-600 dark:text-gray-400">حداکثر ۵ فایل، هر فایل ۵MB</span>
               </div>
               <input
                 type="file"
@@ -349,7 +352,7 @@ const SupportView: React.FC<SupportViewProps> = ({ onBack }) => {
             <div className="flex items-start justify-between gap-3 mb-4 pb-4 border-b border-dashed border-gray-200 dark:border-slate-800">
               <div className="flex-1">
                 <div className="font-black text-gray-800 dark:text-white">{selected.title}</div>
-                <div className="text-xs text-gray-400 mt-1">کاربر: {selected.user.name} ({toEnglishDigits(selected.user.studentId)})</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">کاربر: {selected.user.name} ({toEnglishDigits(selected.user.studentId)})</div>
               </div>
               <div className="flex flex-col items-end gap-2">
                 {ticketBadge(selected.status)}
@@ -397,7 +400,7 @@ const SupportView: React.FC<SupportViewProps> = ({ onBack }) => {
                                   {a.originalName}
                                 </span>
                               </div>
-                              <span className={`text-[10px] opacity-80 shrink-0 ${m.senderRole === 'user' ? 'text-white' : 'text-gray-400'}`}>
+                              <span className={`text-[10px] opacity-80 shrink-0 ${m.senderRole === 'user' ? 'text-white' : 'text-gray-600 dark:text-gray-400'}`}>
                                 {Math.round((a.sizeBytes || 0) / 1024)} KB
                               </span>
                             </button>
@@ -445,7 +448,7 @@ const SupportView: React.FC<SupportViewProps> = ({ onBack }) => {
                     />
                   </label>
                   {replyFiles.length > 0 && (
-                    <span className="text-[11px] text-gray-400">{replyFiles.length} فایل انتخاب شد</span>
+                    <span className="text-[11px] text-gray-600 dark:text-gray-400">{replyFiles.length} فایل انتخاب شد</span>
                   )}
                 </div>
 

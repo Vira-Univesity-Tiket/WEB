@@ -1,3 +1,4 @@
+import { logError } from '../logging.js';
 
 import { db } from '../db.js';
 import { auditLog, hashPassword, isSafeText } from '../security.js';
@@ -62,7 +63,7 @@ export const handleGetStations = async (_req, res) => {
     const [rows] = await db.query('SELECT * FROM stations ORDER BY id DESC');
     res.json(rows.map(mapStation));
   } catch (error) {
-    console.error('Get stations failed', error);
+    logError('Get stations failed', error);
     if (error?.code === 'ER_NO_SUCH_TABLE') {
       return res.json([]);
     }
@@ -86,7 +87,7 @@ export const handleCreateStation = async (req, res) => {
     await auditLog(db, req, 'admin.station_create', 'station', result.insertId, { name: stationName });
     res.status(201).json(mapStation(rows[0]));
   } catch (error) {
-    console.error('Create station failed', error);
+    logError('Create station failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -97,7 +98,7 @@ export const handleUpdateStation = async (req, res) => {
   const stationName = sanitizeText(name, 120);
   const latitude = parseCoordinate(lat, { min: -90, max: 90 });
   const longitude = parseCoordinate(lng, { min: -180, max: 180 });
-  if (!Number.isFinite(stationId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(stationId) || stationId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
   if (!isSafeText(stationName, 120) || !latitude.ok || !longitude.ok) {
     return res.status(400).json({ error: 'Invalid station data' });
   }
@@ -107,7 +108,7 @@ export const handleUpdateStation = async (req, res) => {
     await auditLog(db, req, 'admin.station_update', 'station', stationId);
     res.json({ success: true });
   } catch (error) {
-    console.error('Update station failed', error);
+    logError('Update station failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -120,14 +121,14 @@ export const handleToggleStationStatus = async (req, res) => {
     await auditLog(db, req, 'admin.station_toggle_status', 'station', stationId, { isActive: Boolean(rows[0]?.is_active) });
     res.json({ success: true, isActive: Boolean(rows[0]?.is_active) });
   } catch (error) {
-    console.error('Toggle station status failed', error);
+    logError('Toggle station status failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleDeleteStation = async (req, res) => {
   const stationId = Number(req.params.stationId);
-  if (!Number.isFinite(stationId)) return res.status(400).json({ error: 'Invalid station id' });
+  if ((!Number.isSafeInteger(stationId) || stationId <= 0)) return res.status(400).json({ error: 'Invalid station id' });
 
   try {
     const [result] = await db.query('DELETE FROM stations WHERE id = ?', [stationId]);
@@ -135,7 +136,7 @@ export const handleDeleteStation = async (req, res) => {
     await auditLog(db, req, 'admin.station_delete', 'station', stationId);
     res.json({ success: true });
   } catch (error) {
-    console.error('Delete station failed', error);
+    logError('Delete station failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -154,7 +155,7 @@ export const handleGetDrivers = async (_req, res) => {
     );
     res.json(rows.map(mapDriver));
   } catch (error) {
-    console.error('Get drivers failed', error);
+    logError('Get drivers failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -162,7 +163,7 @@ export const handleGetDrivers = async (_req, res) => {
 // NEW: Export Data for a single driver
 export const handleGetDriverExportData = async (req, res) => {
   const driverId = Number(req.params.driverId);
-  if (!Number.isFinite(driverId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(driverId) || driverId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
 
   try {
     // 1. Driver Basic Info
@@ -221,7 +222,7 @@ export const handleGetDriverExportData = async (req, res) => {
 
     res.json(exportData);
   } catch (error) {
-    console.error('Export Driver Data Error', error);
+    logError('Export Driver Data Error', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -232,7 +233,7 @@ export const handleCreateDriver = async (req, res) => {
   const normalizedPassword = String(password || '').trim();
   const normalizedName = sanitizeText(name, 100);
   const normalizedLicensePlate = sanitizeText(licensePlate, 30);
-  const capacityValidation = parsePositiveInt(capacity || 30, { min: 1, max: 80, error: 'INVALID_CAPACITY' });
+  const capacityValidation = parsePositiveInt(capacity ?? 30, { min: 1, max: 80, error: 'INVALID_CAPACITY' });
   const driverCapacity = capacityValidation.ok ? capacityValidation.value : 30;
   const phoneValidation = phone ? validateIranMobile(phone) : { ok: true, value: '' };
   const stations = Array.isArray(assignedStations) ? assignedStations : [];
@@ -273,7 +274,7 @@ export const handleCreateDriver = async (req, res) => {
     }
 
     await connection.commit();
-    await auditLog(db, req, 'admin.driver_create', 'driver', newDriverId, { username: normalizedUsername });
+    await auditLog(connection, req, 'admin.driver_create', 'driver', newDriverId, { username: normalizedUsername });
 
     const responseDriver = {
       id: newDriverId.toString(),
@@ -289,7 +290,7 @@ export const handleCreateDriver = async (req, res) => {
     res.status(201).json(responseDriver);
   } catch (error) {
     await connection.rollback();
-    console.error('Create driver failed', error);
+    logError('Create driver failed', error);
     if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Username or license plate already used' });
     if (error?.code === 'ER_BAD_FIELD_ERROR') return res.status(500).json({ error: 'DB Schema Error' });
     res.status(500).json({ error: 'Server error' });
@@ -301,15 +302,16 @@ export const handleCreateDriver = async (req, res) => {
 export const handleUpdateDriver = async (req, res) => {
   const driverId = Number(req.params.driverId);
   const { name, username, licensePlate, phone, capacity, password, assignedStations } = req.body;
-  const capacityValidation = parsePositiveInt(capacity || 30, { min: 1, max: 80, error: 'INVALID_CAPACITY' });
+  const capacityValidation = parsePositiveInt(capacity ?? 30, { min: 1, max: 80, error: 'INVALID_CAPACITY' });
   const phoneValidation = phone ? validateIranMobile(phone) : { ok: true, value: '' };
-  if (!Number.isFinite(driverId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(driverId) || driverId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
   if (!capacityValidation.ok) return res.status(400).json({ error: capacityValidation.error });
   if (!phoneValidation.ok) return res.status(400).json({ error: phoneValidation.error });
 
   const normalizedName = sanitizeText(name, 100);
   const normalizedUsername = sanitizeText(username, 50);
   const normalizedLicensePlate = sanitizeText(licensePlate, 30);
+  if (!normalizedName || normalizedUsername.length < 3 || !normalizedLicensePlate) return res.status(400).json({ error: 'نام، نام کاربری و پلاک معتبر الزامی است.' });
   const hasStationPayload = Array.isArray(assignedStations);
   const stationIds = hasStationPayload ? assignedStations.map((item) => Number(item)).filter((item) => Number.isFinite(item)) : [];
 
@@ -345,7 +347,7 @@ export const handleUpdateDriver = async (req, res) => {
     await auditLog(db, req, 'admin.driver_update', 'driver', driverId, { passwordReset: Boolean(password) });
     res.json({ success: true });
   } catch (error) {
-    console.error('Update driver failed', error);
+    logError('Update driver failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -358,14 +360,14 @@ export const handleToggleDriverStatus = async (req, res) => {
     await auditLog(db, req, 'admin.driver_toggle_status', 'driver', driverId, { newStatus: rows[0]?.status });
     res.json({ success: true, newStatus: rows[0]?.status });
   } catch (error) {
-    console.error('Toggle driver failed', error);
+    logError('Toggle driver failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleDeleteDriver = async (req, res) => {
   const driverId = Number(req.params.driverId);
-  if (!Number.isFinite(driverId)) return res.status(400).json({ error: 'Invalid driver id' });
+  if ((!Number.isSafeInteger(driverId) || driverId <= 0)) return res.status(400).json({ error: 'Invalid driver id' });
 
   try {
     const [scheduleRows] = await db.query('SELECT COUNT(*) AS count FROM schedules WHERE driver_id = ?', [driverId]);
@@ -389,7 +391,7 @@ export const handleDeleteDriver = async (req, res) => {
     await auditLog(db, req, 'admin.driver_delete', 'driver', driverId);
     res.json({ success: true });
   } catch (error) {
-    console.error('Delete driver failed', error);
+    logError('Delete driver failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -402,7 +404,7 @@ export const handleGetPendingDrivers = async (req, res) => {
     );
     res.json(rows.map(mapDriverRequest));
   } catch (error) {
-    console.error('Get Pending Drivers Error', error);
+    logError('Get Pending Drivers Error', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -416,7 +418,7 @@ export const handleGetDriverRequestHistory = async (req, res) => {
     );
     res.json(rows.map(mapDriverRequest));
   } catch (error) {
-    console.error('Get Driver Request History Error', error);
+    logError('Get Driver Request History Error', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -428,7 +430,7 @@ export const handleApproveDriver = async (req, res) => {
     await auditLog(db, req, 'admin.driver_approve', 'driver', driverId);
     res.json({ success: true });
   } catch (error) {
-    console.error('Approve Driver Error', error);
+    logError('Approve Driver Error', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -443,7 +445,7 @@ export const handleRejectDriver = async (req, res) => {
     await auditLog(db, req, 'admin.driver_reject', 'driver', driverId, { reason });
     res.json({ success: true });
   } catch (error) {
-    console.error('Reject Driver Error', error);
+    logError('Reject Driver Error', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -456,7 +458,7 @@ export const handleGetSchedules = async (_req, res) => {
     );
     res.json(rows.map(mapSchedule));
   } catch (error) {
-    console.error('Get schedules failed', error);
+    logError('Get schedules failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -487,7 +489,7 @@ export const handleCreateSchedule = async (req, res) => {
     await auditLog(db, req, 'admin.schedule_create', 'schedule', result.insertId);
     res.status(201).json(mapSchedule(rows[0]));
   } catch (error) {
-    console.error('Create schedule failed', error);
+    logError('Create schedule failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -500,23 +502,32 @@ export const handleUpdateSchedule = async (req, res) => {
   const destination = parsePositiveInt(destinationStationId, { error: 'INVALID_STATION_ID' });
   const time = parseTime(departureTime);
   const normalizedPrice = parsePositiveInt(price, { min: 1000, max: 100000000, error: 'INVALID_PRICE' });
-  if (!Number.isFinite(scheduleId)) return res.status(400).json({ error: 'Invalid ID' });
+  if ((!Number.isSafeInteger(scheduleId) || scheduleId <= 0)) return res.status(400).json({ error: 'Invalid ID' });
   if (!driver.ok) return res.status(400).json({ error: driver.error });
   if (!origin.ok || !destination.ok) return res.status(400).json({ error: 'INVALID_STATION_IDS' });
   if (!time.ok) return res.status(400).json({ error: time.error });
   if (!normalizedPrice.ok) return res.status(400).json({ error: normalizedPrice.error });
 
+  if (origin.value === destination.value) return res.status(400).json({ error: 'مبدا و مقصد باید متفاوت باشند.' });
+  const connection = await db.getConnection();
   try {
-    await db.query(
-      'UPDATE schedules SET driver_id=?, origin_station_id=?, destination_station_id=?, departure_time=?, price=? WHERE id=?',
-      [driver.value, origin.value, destination.value, time.value, normalizedPrice.value, scheduleId]
-    );
-    await auditLog(db, req, 'admin.schedule_update', 'schedule', scheduleId);
+    await connection.beginTransaction();
+    const [current] = await connection.query('SELECT * FROM schedules WHERE id = ? FOR UPDATE', [scheduleId]);
+    if (!current.length) { await connection.rollback(); return res.status(404).json({ error: 'Schedule not found' }); }
+    const changed = current[0].driver_id !== driver.value || current[0].origin_station_id !== origin.value || current[0].destination_station_id !== destination.value || String(current[0].departure_time) !== time.value;
+    if (changed) {
+      const [[sold]] = await connection.query("SELECT COUNT(*) AS count FROM tickets t JOIN buses b ON b.id = t.bus_id WHERE b.schedule_id = ? AND DATE(t.created_at) = CURDATE() AND t.status <> 'cancelled'", [scheduleId]);
+      if (sold.count > 0) { await connection.rollback(); return res.status(409).json({ error: 'برای این سرویس امروز بلیط صادر شده است؛ برای تغییر راننده، مسیر یا زمان یک برنامه جدید بسازید.' }); }
+    }
+    await connection.query('UPDATE schedules SET driver_id=?, origin_station_id=?, destination_station_id=?, departure_time=?, price=? WHERE id=?', [driver.value, origin.value, destination.value, time.value, normalizedPrice.value, scheduleId]);
+    await connection.commit();
+    await auditLog(connection, req, 'admin.schedule_update', 'schedule', scheduleId);
     res.json({ success: true });
   } catch (error) {
-    console.error('Update schedule failed', error);
+    await connection.rollback();
+    logError('Update schedule failed', error);
     res.status(500).json({ error: 'Server error' });
-  }
+  } finally { connection.release(); }
 };
 
 export const handleToggleScheduleStatus = async (req, res) => {
@@ -527,14 +538,14 @@ export const handleToggleScheduleStatus = async (req, res) => {
     await auditLog(db, req, 'admin.schedule_toggle_status', 'schedule', scheduleId, { newStatus: rows[0]?.status });
     res.json({ success: true, newStatus: rows[0]?.status });
   } catch (error) {
-    console.error('Toggle schedule failed', error);
+    logError('Toggle schedule failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const handleDeleteSchedule = async (req, res) => {
   const scheduleId = Number(req.params.scheduleId);
-  if (!Number.isFinite(scheduleId)) return res.status(400).json({ error: 'Invalid schedule id' });
+  if ((!Number.isSafeInteger(scheduleId) || scheduleId <= 0)) return res.status(400).json({ error: 'Invalid schedule id' });
 
   try {
     const [result] = await db.query('DELETE FROM schedules WHERE id = ?', [scheduleId]);
@@ -542,7 +553,7 @@ export const handleDeleteSchedule = async (req, res) => {
     await auditLog(db, req, 'admin.schedule_delete', 'schedule', scheduleId);
     res.json({ success: true });
   } catch (error) {
-    console.error('Delete schedule failed', error);
+    logError('Delete schedule failed', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
