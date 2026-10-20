@@ -45,7 +45,7 @@ test('issue tickets, scan continuously without restarting the camera, reject inv
     (window as any).cameraRequests = 0;
     Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: async () => {
       (window as any).cameraRequests += 1;
-      const canvas = document.createElement('canvas'); canvas.width = 440; canvas.height = 440;
+      const canvas = document.createElement('canvas'); canvas.width = 390; canvas.height = 844;
       let currentImage: HTMLImageElement | null = null;
       (window as any).setCameraFrame = async (value: string | null) => {
         if (value) {
@@ -60,8 +60,8 @@ test('issue tickets, scan continuously without restarting the camera, reject inv
       const drawFrame = () => {
         if (stream.getTracks().every(track => track.readyState === 'ended')) return;
         const context = canvas.getContext('2d')!;
-        context.fillStyle = 'white'; context.fillRect(0, 0, 440, 440);
-        if (currentImage) context.drawImage(currentImage, 0, 0, 440, 440);
+        context.fillStyle = '#334155'; context.fillRect(0, 0, canvas.width, canvas.height);
+        if (currentImage) context.drawImage(currentImage, 45, 160, 300, 300);
         requestAnimationFrame(drawFrame);
       };
       drawFrame();
@@ -89,6 +89,10 @@ test('issue tickets, scan continuously without restarting the camera, reject inv
   const streamId = await driver.locator('video').evaluate(element => ((element as HTMLVideoElement).srcObject as MediaStream).id);
   if (process.env.VIRA_BROWSER_PREVIEW === 'true') expect(initialCameraRequests).toBe(1);
   await expect(driver.getByText('آماده اسکن بلیط بعدی', { exact: true })).toBeVisible();
+  const preview = await driver.getByLabel('دوربین اسکن بلیط').boundingBox();
+  expect(preview).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+  await expect(driver.getByText('QR بلیط را داخل کادر نگه دارید', { exact: true })).toHaveCount(0);
+  await expect(driver.getByRole('button', { name: 'ورود کد ۴ رقمی', exact: true })).toBeInViewport();
   await driver.screenshot({ path: 'test-results/driver-scanner-mobile.png', fullPage: true });
   await expect(driver.getByText('بلیط تایید شد', { exact: true })).not.toBeVisible();
   expect(scanRequests).toBe(1);
@@ -144,6 +148,9 @@ test('touch forms keep readable input sizes and the initial viewport through foc
   expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1);
   await page.getByRole('button', { name: 'رزرو بلیط', exact: true }).click();
   await page.getByRole('button', { name: 'مبدا حرکت', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeFocused();
+  await expect(page.getByRole('dialog').getByRole('textbox')).not.toBeFocused();
+  await page.getByRole('dialog').getByRole('textbox').tap();
   await focusControl(page.getByRole('dialog').getByRole('textbox'));
   await page.goto('/driver');
   await focusControl(page.getByLabel('نام کاربری راننده', { exact: true }));
@@ -157,7 +164,7 @@ test('touch forms keep readable input sizes and the initial viewport through foc
   await context.close();
 });
 
-test('small screens, keyboard station picker, corrupted cache remain usable', async ({ page }) => {
+test('station search is optional on mobile and desktop, keyboard navigation and corrupted cache remain usable', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto('/');
   await page.evaluate(() => { localStorage.setItem('vira_user_profile', '{broken'); sessionStorage.setItem('vira_admin_auth_meta', '{broken'); });
@@ -172,10 +179,81 @@ test('small screens, keyboard station picker, corrupted cache remain usable', as
   await login(page);
   await page.getByRole('button', { name: 'رزرو بلیط' }).click();
   const trigger = page.getByRole('button', { name: 'مبدا حرکت', exact: true });
-  await trigger.click();
-  await expect(page.getByRole('dialog', { name: 'مبدا حرکت' })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(trigger).toBeFocused();
+  for (const width of [320, 1024]) {
+    await page.setViewportSize({ width, height: 844 });
+    await trigger.click();
+    const dialog = page.getByRole('dialog', { name: 'مبدا حرکت' });
+    const search = dialog.getByRole('textbox');
+    await expect(dialog).toBeFocused();
+    // Guard against the former delayed search autofocus as well as initial dialog focus.
+    await page.waitForTimeout(100);
+    await expect(dialog).toBeFocused();
+    await expect(search).not.toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(dialog.getByRole('option').last()).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(width <= 640 ? dialog.getByRole('button', { name: 'بستن فهرست ایستگاه‌ها' }) : search).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    await dialog.getByRole('option', { name: 'ایستگاه آزمایشی یک' }).click();
+    await expect(trigger).toContainText('ایستگاه آزمایشی یک');
+    await trigger.click();
+    await expect(dialog).toBeFocused();
+    await search.click();
+    await expect(search).toBeFocused();
+    await search.fill('دو');
+    await expect(dialog.getByRole('option')).toHaveCount(1);
+    await dialog.getByRole('option', { name: 'ایستگاه آزمایشی دو' }).click();
+    await expect(trigger).toContainText('ایستگاه آزمایشی دو');
+    await trigger.click();
+    await expect(search).toHaveValue('');
+    await page.keyboard.press('Escape');
+    await expect(trigger).toBeFocused();
+  }
+});
+
+test('driver route requests keep a compact departure time field and submit the selected time', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/driver');
+  await page.getByLabel('نام کاربری راننده', { exact: true }).fill('driver-test');
+  await page.getByLabel('رمز عبور راننده', { exact: true }).fill('local-driver-test-password');
+  await page.getByRole('button', { name: 'ورود به پنل', exact: true }).click();
+  await page.getByRole('button', { name: 'درخواست مسیر', exact: true }).click();
+  const time = page.getByLabel('ساعت حرکت', { exact: true });
+  for (const width of [320, 390, 1024]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(time).toBeVisible();
+    const box = (await time.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeLessThanOrEqual(52);
+    expect(box.width).toBeLessThanOrEqual(176);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(await time.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [label, station] of [['ایستگاه مبدا', 'ایستگاه آزمایشی یک'], ['ایستگاه مقصد', 'ایستگاه آزمایشی سه']]) {
+    await page.getByRole('button', { name: label, exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: label, exact: true });
+    await expect(dialog).toBeFocused();
+    await expect(dialog.getByRole('textbox')).not.toBeFocused();
+    await dialog.getByRole('option', { name: station, exact: true }).click();
+  }
+  await time.fill('09:45');
+  await expect(time).toHaveValue('09:45');
+  await page.screenshot({ path: 'test-results/driver-route-request-mobile.png', fullPage: true });
+  const submission = page.waitForResponse(response => response.url().endsWith('/driver/route-requests') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'ثبت درخواست', exact: true }).click();
+  const response = await submission;
+  expect(response.ok()).toBe(true);
+  expect(response.request().postDataJSON()).toMatchObject({ originStationId: '1', destinationStationId: '3', departureTime: '09:45' });
+  expect((await response.json()).success).toBe(true);
+  await expect(page.getByText('درخواست مسیر ثبت شد', { exact: true })).toBeVisible();
+  await expect(page.getByText('09:45', { exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
 });
 
 test('admin screen uses the existing routes and backend contracts', async ({ page }) => {

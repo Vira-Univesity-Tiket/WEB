@@ -27,12 +27,11 @@ const StationSelect: React.FC<StationSelectProps> = ({
   onChange
 }) => {
   const [open, setOpen] = useState(false);
-  const panelRef = useDialogFocus(open, () => setOpen(false));
+  const panelRef = useDialogFocus(open, () => setOpen(false), 'dialog');
   const [query, setQuery] = useState('');
   const [isMobile, setIsMobile] = useState(isMobileQuery());
   const [portalReady, setPortalReady] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const instanceIdRef = useRef(`station-select-${Math.random().toString(36).slice(2)}`);
 
   useEffect(() => {
@@ -69,13 +68,7 @@ const StationSelect: React.FC<StationSelectProps> = ({
   }, []);
 
   useEffect(() => {
-    if (!open) {
-      setQuery('');
-      return;
-    }
-    // Focus search for better UX
-    const t = window.setTimeout(() => inputRef.current?.focus(), 50);
-    return () => window.clearTimeout(t);
+    if (!open) setQuery('');
   }, [open]);
 
   const activeStations = useMemo(
@@ -167,7 +160,7 @@ const StationSelect: React.FC<StationSelectProps> = ({
           </div>
           <div className="flex-1">
             <div className="text-sm font-black text-gray-800 dark:text-white">{label}</div>
-            <div className="text-[11px] text-gray-600 dark:text-gray-400">برای جستجو، نام ایستگاه را وارد کنید</div>
+            <div className="text-[11px] text-gray-600 dark:text-gray-400">ایستگاه را انتخاب کنید؛ جست‌وجو اختیاری است.</div>
           </div>
           {isMobile && (
             <button
@@ -182,7 +175,7 @@ const StationSelect: React.FC<StationSelectProps> = ({
 
         <div className="relative mb-3">
           <input
-            aria-label={`جستجوی ${label}`} ref={inputRef}
+            aria-label={`جستجوی ${label}`}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="جستجوی ایستگاه..."

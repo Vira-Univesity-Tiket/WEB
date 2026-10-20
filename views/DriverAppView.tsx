@@ -1143,9 +1143,9 @@ const DriverAppView: React.FC = () => {
               <StationSelect label="ایستگاه مقصد" placeholder="انتخاب مقصد..." value={routeDestination} stations={routeStations} onChange={setRouteDestination} />
             </div>
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-500">ساعت حرکت</label>
-                <input type="time" value={routeTime} onChange={(e) => setRouteTime(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm font-bold outline-none focus:border-vira-primary dir-ltr text-right" />
+              <div className="min-w-0 flex flex-col items-start gap-1">
+                <label htmlFor="driver-route-time" className="text-xs font-bold text-gray-500">ساعت حرکت</label>
+                <input id="driver-route-time" type="time" dir="ltr" value={routeTime} onChange={(e) => setRouteTime(e.target.value)} className="w-40 max-w-full min-w-0 h-12 box-border bg-gray-50 border border-gray-200 rounded-xl px-3 py-0 text-base font-bold outline-none focus:border-vira-primary" />
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-gray-500">قیمت (تومان)</label>

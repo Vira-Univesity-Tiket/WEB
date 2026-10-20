@@ -109,19 +109,13 @@ const TicketCameraScanner: React.FC<Props> = ({ onScan, onManual, busy = false }
     };
   }, [visible]);
 
-  return <div className="relative w-full h-full flex flex-col">
-    <div className="flex-1 relative min-h-0 overflow-hidden bg-black">
-      <video ref={video} className="absolute inset-0 w-full h-full object-cover" muted playsInline autoPlay aria-label="دوربین اسکن بلیط" />
-      <div className="absolute inset-0 flex flex-col items-center justify-center p-6 pointer-events-none">
-        <div className="w-[min(72vw,280px)] aspect-square rounded-3xl border-4 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]" />
-        <p className="text-white text-sm mt-6 text-center">QR بلیط را داخل کادر نگه دارید</p>
-      </div>
-      {loading && <div role="status" className="absolute inset-0 flex items-center justify-center bg-black/70 text-white">راه‌اندازی دوربین…</div>}
-      {error && <div role="alert" className="absolute inset-0 flex items-center justify-center bg-black/90 p-8 text-center text-white leading-8">{error}</div>}
-    </div>
-    <div className="bg-black p-5 pb-[max(24px,env(safe-area-inset-bottom))] space-y-3">
+  return <div className="relative w-full h-full overflow-hidden bg-black">
+    <video ref={video} className="absolute inset-0 w-full h-full object-cover" muted playsInline autoPlay aria-label="دوربین اسکن بلیط" />
+    {loading && <div role="status" className="absolute inset-0 flex items-center justify-center bg-black/70 text-white">راه‌اندازی دوربین…</div>}
+    {error && <div role="alert" className="absolute inset-0 flex items-center justify-center bg-black/90 p-8 text-center text-white leading-8">{error}</div>}
+    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-5 pt-12 pb-[max(24px,env(safe-area-inset-bottom))] space-y-3">
       {!loading && !error && <p className="text-center text-white/90 text-sm" aria-live="polite">{processing || busy ? 'در حال تأیید بلیط…' : 'آماده اسکن بلیط بعدی'}</p>}
-      <button type="button" onClick={onManual} className="w-full border border-white/30 text-white rounded-2xl py-4 flex justify-center gap-2"><Icons.Key size={20} /> ورود کد ۴ رقمی</button>
+      <button type="button" onClick={onManual} className="w-full bg-black/50 border border-white/40 text-white rounded-2xl py-4 flex justify-center gap-2"><Icons.Key size={20} /> ورود کد ۴ رقمی</button>
     </div>
   </div>;
 };
