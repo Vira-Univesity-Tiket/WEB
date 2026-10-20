@@ -1,5 +1,6 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import QRCode from 'qrcode';
 
 const login = async (page: Page) => {
   await page.goto('/');
@@ -9,7 +10,7 @@ const login = async (page: Page) => {
   await expect(page.getByRole('button', { name: 'حساب کاربری', exact: true })).toBeVisible();
 };
 
-test('issue a real ticket, decode it without BarcodeDetector, board once and submit feedback', async ({ page, browser }) => {
+test('issue tickets, scan continuously without restarting the camera, reject invalid QR and submit feedback', async ({ page, browser }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await login(page);
@@ -30,18 +31,40 @@ test('issue a real ticket, decode it without BarcodeDetector, board once and sub
   await expect(qr).toHaveAttribute('src', /^data:image\/png/);
   const image = await qr.getAttribute('src');
   await page.screenshot({ path: 'test-results/ticket-issued-mobile.png', fullPage: true });
+  const nextPurchase = await page.request.post('/api1/tickets/reserve', { headers: { Authorization: `Bearer ${await page.evaluate(() => localStorage.getItem('vira_user_auth_token'))}`, 'Idempotency-Key': `browser-next-ticket-${Date.now()}` }, data: { schedule_id: 1, origin_station_id: 1, destination_station_id: 2, departure_time: '08:30', seatCount: 1 } });
+  expect(nextPurchase.ok()).toBe(true);
+  const nextTicket = (await nextPurchase.json()).ticket;
+  const nextImage = await QRCode.toDataURL(nextTicket.qrCode, { width: 440, margin: 4, errorCorrectionLevel: 'H' });
+  const invalidImage = await QRCode.toDataURL('QR-NOT-ISSUED', { width: 440, margin: 4 });
 
   const driverContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const driver = await driverContext.newPage();
+  driver.on('pageerror', error => errors.push(error.message));
   await driver.addInitScript(({ image }) => {
     Object.defineProperty(window, 'BarcodeDetector', { value: undefined, configurable: true });
+    (window as any).cameraRequests = 0;
     Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: async () => {
+      (window as any).cameraRequests += 1;
       const canvas = document.createElement('canvas'); canvas.width = 440; canvas.height = 440;
-      const img = new Image();
-      await new Promise<void>(resolve => { img.onload = () => resolve(); img.src = image!; });
-      canvas.getContext('2d')!.drawImage(img, 0, 0, 440, 440);
+      let currentImage: HTMLImageElement | null = null;
+      (window as any).setCameraFrame = async (value: string | null) => {
+        if (value) {
+          const img = new Image();
+          await new Promise<void>(resolve => { img.onload = () => resolve(); img.src = value; });
+          currentImage = img;
+        } else currentImage = null;
+      };
+      await (window as any).setCameraFrame(image);
       const stream = canvas.captureStream(10);
       (window as any).testTracks = stream.getTracks();
+      const drawFrame = () => {
+        if (stream.getTracks().every(track => track.readyState === 'ended')) return;
+        const context = canvas.getContext('2d')!;
+        context.fillStyle = 'white'; context.fillRect(0, 0, 440, 440);
+        if (currentImage) context.drawImage(currentImage, 0, 0, 440, 440);
+        requestAnimationFrame(drawFrame);
+      };
+      drawFrame();
       return stream;
     }, configurable: true });
   }, { image });
@@ -49,25 +72,89 @@ test('issue a real ticket, decode it without BarcodeDetector, board once and sub
   await driver.getByPlaceholder('نام کاربری', { exact: true }).fill('driver-test');
   await driver.getByPlaceholder('رمز عبور', { exact: true }).fill('local-driver-test-password');
   await driver.getByRole('button', { name: 'ورود به پنل', exact: true }).click();
+  let scanRequests = 0; let activeRequests = 0; let maxActiveRequests = 0;
+  await driver.route('**/api1/driver/scan/qr', async route => {
+    scanRequests += 1; activeRequests += 1; maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+    try {
+      const response = await route.fetch();
+      await new Promise(resolve => setTimeout(resolve, 350));
+      await route.fulfill({ response });
+    } finally { activeRequests -= 1; }
+  });
   await driver.getByRole('button', { name: /اسکن بارکد \(دوربین\)/ }).click();
   await expect(driver.getByText('بلیط تایید شد', { exact: true })).toBeVisible();
-  await expect.poll(() => driver.evaluate(() => (window as any).testTracks.every((track: MediaStreamTrack) => track.readyState === 'ended'))).toBe(true);
+  await expect.poll(() => driver.evaluate(() => (window as any).testTracks.every((track: MediaStreamTrack) => track.readyState === 'live'))).toBe(true);
+  // React StrictMode intentionally repeats initial effects in development.
+  const initialCameraRequests = await driver.evaluate(() => (window as any).cameraRequests);
+  const streamId = await driver.locator('video').evaluate(element => ((element as HTMLVideoElement).srcObject as MediaStream).id);
+  if (process.env.VIRA_BROWSER_PREVIEW === 'true') expect(initialCameraRequests).toBe(1);
+  await expect(driver.getByText('آماده اسکن بلیط بعدی', { exact: true })).toBeVisible();
   await driver.screenshot({ path: 'test-results/driver-scanner-mobile.png', fullPage: true });
-  await driver.keyboard.press('Escape');
+  await expect(driver.getByText('بلیط تایید شد', { exact: true })).not.toBeVisible();
+  expect(scanRequests).toBe(1);
+  await driver.evaluate(image => (window as any).setCameraFrame(image), invalidImage);
+  await expect(driver.getByRole('alert')).toContainText('بلیط رد شد');
+  await driver.evaluate(image => (window as any).setCameraFrame(image), nextImage);
+  await expect(driver.getByText('بلیط تایید شد', { exact: true })).toBeVisible({ timeout: 2000 });
+  await expect(driver.getByRole('status').filter({ hasText: 'بلیط تایید شد' })).toContainText(nextTicket.validationCode);
+  expect(scanRequests).toBe(3);
+  expect(maxActiveRequests).toBe(1);
+  expect(await driver.evaluate(() => (window as any).cameraRequests)).toBe(initialCameraRequests);
+  expect(await driver.locator('video').evaluate(element => ((element as HTMLVideoElement).srcObject as MediaStream).id)).toBe(streamId);
+  expect(await driver.evaluate(() => (window as any).testTracks.every((track: MediaStreamTrack) => track.readyState === 'live'))).toBe(true);
+  await expect(driver.getByRole('button', { name: 'اسکن بلیط بعدی', exact: true })).toHaveCount(0);
+  await expect(driver.getByRole('button', { name: 'بستن اسکنر', exact: true })).toBeInViewport();
+  await driver.getByRole('button', { name: 'بستن اسکنر', exact: true }).click();
+  await expect.poll(() => driver.evaluate(() => (window as any).testTracks.every((track: MediaStreamTrack) => track.readyState === 'ended'))).toBe(true);
   await expect(driver.getByRole('dialog', { name: 'اسکن بلیط مسافر' })).not.toBeVisible();
+  await expect(driver.getByText('مسافر سوار شده', { exact: true }).locator('..').getByText('2', { exact: true })).toBeVisible();
   await driver.getByLabel('کد ۴ رقمی بلیط').fill(purchase.ticket.validationCode);
   await expect(driver.getByText('این بلیط قبلاً اسکن شده است.', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'بازگشت به خانه', exact: true }).last().click();
   await page.getByRole('button', { name: 'بلیط‌ها', exact: true }).click();
   await page.getByRole('tab', { name: /آرشیو/ }).click();
-  await page.getByRole('button', { name: 'ثبت نظر سفر', exact: true }).click();
+  await page.getByRole('button', { name: 'ثبت نظر سفر', exact: true }).first().click();
   await page.getByRole('button', { name: '5 از ۵ ستاره' }).click();
   await page.getByLabel('نظر سفر', { exact: true }).fill('آزمون محلی جریان سفر');
   await page.getByRole('button', { name: 'ثبت نظر', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'سفر چطور بود؟' })).not.toBeVisible();
   expect(errors).toEqual([]);
   await driverContext.close();
+});
+
+test('touch forms keep readable input sizes and the initial viewport through focus and login', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+  const page = await context.newPage();
+  const focusControl = async (control: Locator) => {
+    expect(await control.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+    await control.focus();
+    expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  };
+  await page.goto('/');
+  const viewport = await page.locator('meta[name="viewport"]').getAttribute('content');
+  expect(viewport).toContain('width=device-width');
+  expect(viewport).not.toMatch(/user-scalable\s*=\s*no|maximum-scale/i);
+  await focusControl(page.getByLabel('شماره دانشجویی', { exact: true }));
+  await focusControl(page.getByLabel('کد ملی', { exact: true }));
+  await page.getByRole('button', { name: 'ثبت نام', exact: true }).click();
+  await focusControl(page.getByLabel('نام و نام خانوادگی', { exact: true }));
+  await login(page);
+  expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1);
+  await page.getByRole('button', { name: 'رزرو بلیط', exact: true }).click();
+  await page.getByRole('button', { name: 'مبدا حرکت', exact: true }).click();
+  await focusControl(page.getByRole('dialog').getByRole('textbox'));
+  await page.goto('/driver');
+  await focusControl(page.getByLabel('نام کاربری راننده', { exact: true }));
+  await focusControl(page.getByLabel('رمز عبور راننده', { exact: true }));
+  await page.getByLabel('نام کاربری راننده', { exact: true }).fill('driver-test');
+  await page.getByLabel('رمز عبور راننده', { exact: true }).fill('local-driver-test-password');
+  await page.getByRole('button', { name: 'ورود به پنل', exact: true }).click();
+  const code = page.getByLabel('کد ۴ رقمی بلیط', { exact: true });
+  await focusControl(code);
+  expect(await code.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThan(16);
+  await context.close();
 });
 
 test('small screens, keyboard station picker, corrupted cache remain usable', async ({ page }) => {
@@ -121,6 +208,7 @@ test('camera denial keeps manual entry available and closing stops a late camera
   await page.getByRole('button', { name: 'ورود به پنل', exact: true }).click();
   await page.getByRole('button', { name: /اسکن بارکد \(دوربین\)/ }).click();
   await expect(page.getByRole('alert')).toContainText('دسترسی به دوربین مسدود است');
+  await expect(page.getByText('آماده اسکن بلیط بعدی', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'ورود کد ۴ رقمی' }).click();
   await expect(page.getByRole('dialog').getByLabel('کد ۴ رقمی بلیط')).toBeFocused();
   await page.keyboard.press('Escape');

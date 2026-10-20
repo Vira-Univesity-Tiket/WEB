@@ -54,6 +54,8 @@
 
 html {
   height: 100dvh;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -96,6 +98,14 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 :focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
 .dark :focus-visible { outline-color: #93c5fd; }
 img { max-width: 100%; }
+/* Keep touch form controls readable without Safari's small-input focus zoom.
+   A minimum preserves large manual-code inputs and the user's pinch zoom. */
+@media (max-width: 767px), (pointer: coarse) {
+  :is(input, select, textarea),
+  :is(input, select, textarea):is(.text-xs, .text-sm) {
+    font-size: max(16px, 1rem);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }

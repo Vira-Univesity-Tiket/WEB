@@ -91,8 +91,14 @@ const DriverAppView: React.FC = () => {
   const [toast, setToast] = useState({ message: '', type: 'info' as 'success' | 'error' | 'info', visible: false });
 
   const isProcessingScanRef = useRef(false);
+  const [scanPending, setScanPending] = useState(false);
+  const scannerOpenRef = useRef(false);
+  const scanGenerationRef = useRef(0);
+  const scanDataDirtyRef = useRef(false);
+  const currentDriverRef = useRef(session?.id);
+  currentDriverRef.current = session?.id;
   const manualInputRef = useRef<HTMLInputElement>(null);
-  const scannerDialog = useDialogFocus(showScanner, () => setShowScanner(false));
+  const scannerDialog = useDialogFocus(showScanner, () => closeScanner());
   const [loginSubmitting, setLoginSubmitting] = useState(false);
   const [dashboardError, setDashboardError] = useState('');
 
@@ -127,11 +133,13 @@ const DriverAppView: React.FC = () => {
         getDriverRecentScans(driverId),
         getDriverDashboard(driverId)
       ]);
+      if (currentDriverRef.current !== driverId) return;
       setDashboardError('');
       setSummary(summaryData);
       setRecentScans(scansData);
       setDashboardCards(dashboardData);
     } catch (e: any) {
+      if (currentDriverRef.current !== driverId) return;
       if (e?.status === 401 || String(e?.message || '').includes('ورود به حساب کاربری الزامی است')) {
         handleLogout();
         setError('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.');
@@ -246,6 +254,10 @@ const DriverAppView: React.FC = () => {
   };
 
   const handleLogout = () => {
+    scanGenerationRef.current += 1;
+    scannerOpenRef.current = false;
+    scanDataDirtyRef.current = false;
+    currentDriverRef.current = undefined;
     setSession(null);
     localStorage.removeItem(DRIVER_STORAGE_KEY);
     clearDriverAuthToken();
@@ -366,35 +378,53 @@ const DriverAppView: React.FC = () => {
   };
 
   // --- Scanner Logic ---
+  const refreshScannedTrips = (driverId: string) => {
+    if (!scanDataDirtyRef.current || isProcessingScanRef.current || currentDriverRef.current !== driverId) return;
+    scanDataDirtyRef.current = false;
+    void refreshData(driverId);
+  };
+
   const processQrText = async (value: string) => {
     if (!session || isProcessingScanRef.current) return;
     isProcessingScanRef.current = true;
+    setScanPending(true);
+    const generation = scanGenerationRef.current;
     try {
       setScanStatus({ type: 'loading', title: 'در حال بررسی بلیط...' });
       const scan = await driverScanQr(session.id, value.trim());
+      if (currentDriverRef.current !== session.id) return;
+      scanDataDirtyRef.current = true;
+      if (generation !== scanGenerationRef.current) return;
       setScanStatus({
         type: 'success',
         title: 'بلیط تایید شد',
         detail: `${scan.passengerName} | ${scan.count || 1} مسافر | کد ${scan.validationCode || '----'}`
       });
-      showDriverToast(`مسافر تایید شد: ${scan.passengerName}`, 'success');
-      await refreshData(session.id);
     } catch (err: any) {
+      if (generation !== scanGenerationRef.current) return;
       setScanStatus({
         type: 'error',
-        title: 'اسکن ناموفق بود',
+        title: err?.status >= 400 && err?.status < 500 && err?.status !== 429 ? 'بلیط رد شد' : 'تأیید بلیط انجام نشد',
         detail: err?.message || 'کد بلیط معتبر نیست'
       });
-      showDriverToast(err?.message || 'اسکن نامعتبر', 'error');
-    } finally { isProcessingScanRef.current = false; }
+    } finally {
+      isProcessingScanRef.current = false;
+      setScanPending(false);
+      if (!scannerOpenRef.current) refreshScannedTrips(session.id);
+    }
   };
 
   const processCode = async (value: string, source: 'dashboard' | 'overlay') => {
     if (!session || isProcessingScanRef.current) return;
     isProcessingScanRef.current = true;
+    setScanPending(true);
+    const generation = scanGenerationRef.current;
     try {
       setScanStatus({ type: 'loading', title: 'در حال بررسی بلیط...' });
       const scan = await driverScanCode(session.id, value);
+      if (currentDriverRef.current !== session.id) return;
+      scanDataDirtyRef.current = true;
+      if (generation !== scanGenerationRef.current) return;
       setScanStatus({
         type: 'success',
         title: 'بلیط تایید شد',
@@ -405,8 +435,8 @@ const DriverAppView: React.FC = () => {
       if (source === 'dashboard') setCodeInput('');
       else setManualScannerInput(''); // Keep overlay input clean
       
-      await refreshData(session.id);
     } catch (err: any) {
+      if (generation !== scanGenerationRef.current) return;
       setScanStatus({
         type: 'error',
         title: 'اسکن ناموفق بود',
@@ -414,19 +444,34 @@ const DriverAppView: React.FC = () => {
       });
       showDriverToast(err?.message || 'کد نامعتبر', 'error');
       // Keep an unsuccessful code available for correction.
-    } finally { isProcessingScanRef.current = false; }
+    } finally {
+      isProcessingScanRef.current = false;
+      setScanPending(false);
+      if (!scannerOpenRef.current) refreshScannedTrips(session.id);
+    }
   };
 
   const openScanner = () => {
+    scanGenerationRef.current += 1;
+    scannerOpenRef.current = true;
     setScanStatus({ type: 'idle', title: '' });
     setScannerMode('camera');
     setShowScanner(true);
   };
   const closeScanner = () => {
+    scanGenerationRef.current += 1;
+    scannerOpenRef.current = false;
     setShowScanner(false);
     setManualScannerInput('');
     setScanStatus({ type: 'idle', title: '' });
+    if (session) refreshScannedTrips(session.id);
   };
+
+  useEffect(() => {
+    if (!showScanner || scannerMode !== 'camera' || !['success', 'error'].includes(scanStatus.type)) return;
+    const timer = setTimeout(() => setScanStatus(current => current === scanStatus ? { type: 'idle', title: '' } : current), 2500);
+    return () => clearTimeout(timer);
+  }, [scanStatus, showScanner, scannerMode]);
 
   // Handle Dashboard Input
   useEffect(() => {
@@ -843,19 +888,19 @@ const DriverAppView: React.FC = () => {
               <button 
                   onClick={closeScanner}
                   aria-label="بستن اسکنر"
-                  className="absolute top-6 right-6 z-50 bg-white/20 p-3 rounded-full text-white hover:bg-white/40 backdrop-blur-md transition-colors"
+                  className="absolute top-[calc(env(safe-area-inset-top)+16px)] right-6 z-50 bg-black/70 border border-white/40 p-3 rounded-full text-white hover:bg-black/90 backdrop-blur-md transition-colors"
               >
                   <Icons.X size={24} />
               </button>
               
               {scannerMode === 'camera' && scanStatus.type !== 'idle' && (
-                <div role="status" aria-live="polite" className={`absolute top-24 z-30 mx-4 rounded-2xl px-5 py-4 text-center shadow-xl text-white ${scanStatus.type === 'success' ? 'bg-emerald-700' : scanStatus.type === 'error' ? 'bg-red-700' : 'bg-slate-800'}`}>
+                <div role={scanStatus.type === 'error' ? 'alert' : 'status'} aria-live={scanStatus.type === 'error' ? 'assertive' : 'polite'} aria-atomic="true" className={`absolute top-[calc(env(safe-area-inset-top)+88px)] left-4 right-4 sm:left-auto sm:right-auto sm:max-w-md z-30 rounded-2xl px-5 py-4 text-center shadow-xl text-white break-words ${scanStatus.type === 'success' ? 'bg-emerald-700' : scanStatus.type === 'error' ? 'bg-red-700' : 'bg-slate-800'}`}>
                   <div className="font-bold">{scanStatus.title}</div>
                   {scanStatus.detail && <div className="text-sm mt-2">{scanStatus.detail}</div>}
                 </div>
               )}
               {scannerMode === 'camera' ? (
-                  <TicketCameraScanner onScan={processQrText} onManual={() => setScannerMode('manual')} />
+                  <TicketCameraScanner onScan={processQrText} onManual={() => setScannerMode('manual')} busy={scanPending} />
               ) : (
                   <div className="relative w-full h-full flex flex-col items-center justify-center p-6 bg-black">
                       <div className="w-full max-w-sm space-y-6">
@@ -883,7 +928,7 @@ const DriverAppView: React.FC = () => {
                               <input 
                                   ref={manualInputRef}
                                   aria-label="کد ۴ رقمی بلیط"
-                                  disabled={scanStatus.type === 'loading'}
+                                  disabled={scanPending}
                                   value={manualScannerInput} 
                                   onChange={(e) => setManualScannerInput(toEnglishDigits(e.target.value))} 
                                   placeholder="- - - -" 
@@ -976,7 +1021,7 @@ const DriverAppView: React.FC = () => {
             </h2>
             <div className="py-2">
                <input 
-                  aria-label="کد ۴ رقمی بلیط" disabled={scanStatus.type === 'loading'} value={codeInput}
+                  aria-label="کد ۴ رقمی بلیط" disabled={scanPending} value={codeInput}
                   onChange={(e) => setCodeInput(toEnglishDigits(e.target.value))} 
                   placeholder="----" 
                   maxLength={4} 
@@ -1069,7 +1114,7 @@ const DriverAppView: React.FC = () => {
             </h2>
             <div className="py-2">
               <input
-                aria-label="کد ۴ رقمی بلیط" disabled={scanStatus.type === 'loading'} value={codeInput}
+                aria-label="کد ۴ رقمی بلیط" disabled={scanPending} value={codeInput}
                 onChange={(e) => setCodeInput(toEnglishDigits(e.target.value))}
                 placeholder="----"
                 maxLength={4}

@@ -7,6 +7,26 @@ import { parseUpload } from '../backend/services/uploadValidation.js';
 import { authenticate, issueAuthToken, verifyAuthToken } from '../backend/security.js';
 import { parsePositiveInt } from '../backend/validation.js';
 import { csvCell } from '../utils/csv';
+import { createScanGate } from '../utils/scanGate';
+
+test('continuous scans suppress a held QR and accept a different QR immediately', () => {
+  const shouldScan = createScanGate();
+  assert.equal(shouldScan('QR-FIRST', 0), true);
+  assert.equal(shouldScan('QR-FIRST', 300), false);
+  assert.equal(shouldScan('QR-FIRST', 30_000), false);
+  assert.equal(shouldScan('QR-SECOND', 30_001), true);
+  assert.equal(shouldScan('QR-SECOND', 30_151), false);
+});
+
+test('only a continuous empty interval rearms the same QR, including after slow verification', () => {
+  const shouldScan = createScanGate();
+  assert.equal(shouldScan('QR-FIRST', 0), true);
+  assert.equal(shouldScan('', 10_000), false);
+  assert.equal(shouldScan('QR-FIRST', 10_150), false);
+  assert.equal(shouldScan('', 10_300), false);
+  assert.equal(shouldScan('', 11_050), false);
+  assert.equal(shouldScan('QR-FIRST', 11_051), true);
+});
 
 test('the software decoder reads actual ticket QR pixels, including legacy numeric QR', () => {
   for (const value of ['QR-4A67003B93C7A53052AB89C3F6110DD4', '1234']) {
