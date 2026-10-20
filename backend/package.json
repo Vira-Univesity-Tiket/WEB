@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "catalog:najafabad": "node scripts/import-najafabad-services.mjs"
   },
   "dependencies": {
     "cors": "^2.8.6",

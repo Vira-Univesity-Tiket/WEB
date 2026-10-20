@@ -1,0 +1,1620 @@
+{
+  "version": 1,
+  "universityKey": "najafabad-university",
+  "description": "برنامه اولیه با انتخاب اپراتور؛ کرایه و برنامه رسمی دانشگاه نیست. مختصات مرجع محدوده است، نه ادعای محل دقیق سوارشدن. حساب‌های سرویس ایجاد می‌شوند و نام راننده و پلاک باید برای بهره‌برداری فیزیکی با ناوگان واقعی تطبیق داده شوند.",
+  "coordinateAttribution": "© OpenStreetMap contributors (ODbL); https://www.openstreetmap.org/copyright",
+  "stations": [
+    {
+      "key": "najafabad-university",
+      "name": "دانشگاه آزاد اسلامی واحد نجف‌آباد",
+      "lat": 32.667312,
+      "lng": 51.3922223,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/way/134482552"
+    },
+    {
+      "key": "najafabad",
+      "name": "نجف آباد — مرکز محدوده",
+      "lat": 32.6350743,
+      "lng": 51.3636804,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/relation/12742531"
+    },
+    {
+      "key": "yazdanshahr",
+      "name": "یزدانشهر — مرکز محدوده",
+      "lat": 32.6307826,
+      "lng": 51.3064849,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/node/12441224417"
+    },
+    {
+      "key": "vilashahr",
+      "name": "ویلاشهر — مرکز محدوده",
+      "lat": 32.6676125,
+      "lng": 51.4256791,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/node/5161593817"
+    },
+    {
+      "key": "kahrizsang",
+      "name": "کهریزسنگ — مرکز محدوده",
+      "lat": 32.6288324,
+      "lng": 51.480913,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/way/368096824"
+    },
+    {
+      "key": "goldasht",
+      "name": "گلدشت — مرکز محدوده",
+      "lat": 32.6247941,
+      "lng": 51.4391574,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/relation/16783015"
+    },
+    {
+      "key": "juzdan",
+      "name": "جوزدان — مرکز محدوده",
+      "lat": 32.5566297,
+      "lng": 51.3714526,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/relation/6556950"
+    },
+    {
+      "key": "tiran",
+      "name": "تیران — مرکز محدوده",
+      "lat": 32.7039199,
+      "lng": 51.1530853,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/node/820885075"
+    },
+    {
+      "key": "khomeinishahr",
+      "name": "خمینی شهر — مرکز محدوده",
+      "lat": 32.6938201,
+      "lng": 51.5254892,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/relation/8209097"
+    },
+    {
+      "key": "dorcheh",
+      "name": "درچه — مرکز محدوده",
+      "lat": 32.6167333,
+      "lng": 51.5554454,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/relation/12400375"
+    },
+    {
+      "key": "fooladshahr",
+      "name": "فولادشهر — مرکز محدوده",
+      "lat": 32.4834868,
+      "lng": 51.4173278,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/relation/6557105"
+    },
+    {
+      "key": "falavarjan",
+      "name": "فلاورجان — مرکز محدوده",
+      "lat": 32.5576772,
+      "lng": 51.5079153,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/relation/12387154"
+    },
+    {
+      "key": "qahderijan",
+      "name": "قهدریجان — مرکز محدوده",
+      "lat": 32.577126,
+      "lng": 51.4539164,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/relation/12387178"
+    },
+    {
+      "key": "zarrinshahr",
+      "name": "زرین شهر — مرکز محدوده",
+      "lat": 32.4261957,
+      "lng": 51.3907989,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/way/734716574"
+    },
+    {
+      "key": "shahinshahr",
+      "name": "شاهین شهر — مرکز محدوده",
+      "lat": 32.8556169,
+      "lng": 51.558376,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/relation/6606071"
+    },
+    {
+      "key": "mobarakeh",
+      "name": "مبارکه — مرکز محدوده",
+      "lat": 32.4190988,
+      "lng": 51.7187472,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/way/798230402"
+    },
+    {
+      "key": "dolatabad",
+      "name": "دولت آباد — مرکز محدوده",
+      "lat": 32.803716,
+      "lng": 51.69628,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/relation/14125744"
+    },
+    {
+      "key": "baharestan",
+      "name": "بهارستان — مرکز محدوده",
+      "lat": 32.4858819,
+      "lng": 51.7785054,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/relation/12980954"
+    },
+    {
+      "key": "isfahan-kaveh",
+      "name": "پایانه کاوه اصفهان",
+      "lat": 32.700131,
+      "lng": 51.6746995,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/node/8502568955"
+    },
+    {
+      "key": "isfahan-soffeh",
+      "name": "پایانه صفه اصفهان",
+      "lat": 32.589411,
+      "lng": 51.67026,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/node/8522002528"
+    },
+    {
+      "key": "isfahan-azadi",
+      "name": "میدان آزادی اصفهان",
+      "lat": 32.6223573,
+      "lng": 51.6645466,
+      "coordinateRole": "area-reference",
+      "source": "https://www.openstreetmap.org/node/6702465520"
+    }
+  ],
+  "drivers": [
+    {
+      "name": "راننده سرویس نجف آباد 1",
+      "username": "vira-naj-01-1",
+      "licensePlate": "VIRA-NAJ-01-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس نجف آباد 2",
+      "username": "vira-naj-01-2",
+      "licensePlate": "VIRA-NAJ-01-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس نجف آباد 3",
+      "username": "vira-naj-01-3",
+      "licensePlate": "VIRA-NAJ-01-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس یزدانشهر 1",
+      "username": "vira-naj-02-1",
+      "licensePlate": "VIRA-NAJ-02-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس یزدانشهر 2",
+      "username": "vira-naj-02-2",
+      "licensePlate": "VIRA-NAJ-02-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس یزدانشهر 3",
+      "username": "vira-naj-02-3",
+      "licensePlate": "VIRA-NAJ-02-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس ویلاشهر 1",
+      "username": "vira-naj-03-1",
+      "licensePlate": "VIRA-NAJ-03-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس ویلاشهر 2",
+      "username": "vira-naj-03-2",
+      "licensePlate": "VIRA-NAJ-03-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس ویلاشهر 3",
+      "username": "vira-naj-03-3",
+      "licensePlate": "VIRA-NAJ-03-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس کهریزسنگ 1",
+      "username": "vira-naj-04-1",
+      "licensePlate": "VIRA-NAJ-04-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس کهریزسنگ 2",
+      "username": "vira-naj-04-2",
+      "licensePlate": "VIRA-NAJ-04-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس کهریزسنگ 3",
+      "username": "vira-naj-04-3",
+      "licensePlate": "VIRA-NAJ-04-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس گلدشت 1",
+      "username": "vira-naj-05-1",
+      "licensePlate": "VIRA-NAJ-05-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس گلدشت 2",
+      "username": "vira-naj-05-2",
+      "licensePlate": "VIRA-NAJ-05-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس گلدشت 3",
+      "username": "vira-naj-05-3",
+      "licensePlate": "VIRA-NAJ-05-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس جوزدان 1",
+      "username": "vira-naj-06-1",
+      "licensePlate": "VIRA-NAJ-06-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس جوزدان 2",
+      "username": "vira-naj-06-2",
+      "licensePlate": "VIRA-NAJ-06-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس جوزدان 3",
+      "username": "vira-naj-06-3",
+      "licensePlate": "VIRA-NAJ-06-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس تیران 1",
+      "username": "vira-naj-07-1",
+      "licensePlate": "VIRA-NAJ-07-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس تیران 2",
+      "username": "vira-naj-07-2",
+      "licensePlate": "VIRA-NAJ-07-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس تیران 3",
+      "username": "vira-naj-07-3",
+      "licensePlate": "VIRA-NAJ-07-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس خمینی شهر 1",
+      "username": "vira-naj-08-1",
+      "licensePlate": "VIRA-NAJ-08-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس خمینی شهر 2",
+      "username": "vira-naj-08-2",
+      "licensePlate": "VIRA-NAJ-08-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس خمینی شهر 3",
+      "username": "vira-naj-08-3",
+      "licensePlate": "VIRA-NAJ-08-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس درچه 1",
+      "username": "vira-naj-09-1",
+      "licensePlate": "VIRA-NAJ-09-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس درچه 2",
+      "username": "vira-naj-09-2",
+      "licensePlate": "VIRA-NAJ-09-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس درچه 3",
+      "username": "vira-naj-09-3",
+      "licensePlate": "VIRA-NAJ-09-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس فولادشهر 1",
+      "username": "vira-naj-10-1",
+      "licensePlate": "VIRA-NAJ-10-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس فولادشهر 2",
+      "username": "vira-naj-10-2",
+      "licensePlate": "VIRA-NAJ-10-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس فولادشهر 3",
+      "username": "vira-naj-10-3",
+      "licensePlate": "VIRA-NAJ-10-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس فلاورجان 1",
+      "username": "vira-naj-11-1",
+      "licensePlate": "VIRA-NAJ-11-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس فلاورجان 2",
+      "username": "vira-naj-11-2",
+      "licensePlate": "VIRA-NAJ-11-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس فلاورجان 3",
+      "username": "vira-naj-11-3",
+      "licensePlate": "VIRA-NAJ-11-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس قهدریجان 1",
+      "username": "vira-naj-12-1",
+      "licensePlate": "VIRA-NAJ-12-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس قهدریجان 2",
+      "username": "vira-naj-12-2",
+      "licensePlate": "VIRA-NAJ-12-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس قهدریجان 3",
+      "username": "vira-naj-12-3",
+      "licensePlate": "VIRA-NAJ-12-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس زرین شهر 1",
+      "username": "vira-naj-13-1",
+      "licensePlate": "VIRA-NAJ-13-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس زرین شهر 2",
+      "username": "vira-naj-13-2",
+      "licensePlate": "VIRA-NAJ-13-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس زرین شهر 3",
+      "username": "vira-naj-13-3",
+      "licensePlate": "VIRA-NAJ-13-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس شاهین شهر 1",
+      "username": "vira-naj-14-1",
+      "licensePlate": "VIRA-NAJ-14-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس شاهین شهر 2",
+      "username": "vira-naj-14-2",
+      "licensePlate": "VIRA-NAJ-14-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس شاهین شهر 3",
+      "username": "vira-naj-14-3",
+      "licensePlate": "VIRA-NAJ-14-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس مبارکه 1",
+      "username": "vira-naj-15-1",
+      "licensePlate": "VIRA-NAJ-15-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس مبارکه 2",
+      "username": "vira-naj-15-2",
+      "licensePlate": "VIRA-NAJ-15-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس مبارکه 3",
+      "username": "vira-naj-15-3",
+      "licensePlate": "VIRA-NAJ-15-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس دولت آباد 1",
+      "username": "vira-naj-16-1",
+      "licensePlate": "VIRA-NAJ-16-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس دولت آباد 2",
+      "username": "vira-naj-16-2",
+      "licensePlate": "VIRA-NAJ-16-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس دولت آباد 3",
+      "username": "vira-naj-16-3",
+      "licensePlate": "VIRA-NAJ-16-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس بهارستان 1",
+      "username": "vira-naj-17-1",
+      "licensePlate": "VIRA-NAJ-17-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس بهارستان 2",
+      "username": "vira-naj-17-2",
+      "licensePlate": "VIRA-NAJ-17-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس بهارستان 3",
+      "username": "vira-naj-17-3",
+      "licensePlate": "VIRA-NAJ-17-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس پایانه کاوه اصفهان 1",
+      "username": "vira-naj-18-1",
+      "licensePlate": "VIRA-NAJ-18-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس پایانه کاوه اصفهان 2",
+      "username": "vira-naj-18-2",
+      "licensePlate": "VIRA-NAJ-18-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس پایانه کاوه اصفهان 3",
+      "username": "vira-naj-18-3",
+      "licensePlate": "VIRA-NAJ-18-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس پایانه صفه اصفهان 1",
+      "username": "vira-naj-19-1",
+      "licensePlate": "VIRA-NAJ-19-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس پایانه صفه اصفهان 2",
+      "username": "vira-naj-19-2",
+      "licensePlate": "VIRA-NAJ-19-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس پایانه صفه اصفهان 3",
+      "username": "vira-naj-19-3",
+      "licensePlate": "VIRA-NAJ-19-3",
+      "capacity": 44
+    },
+    {
+      "name": "راننده سرویس میدان آزادی اصفهان 1",
+      "username": "vira-naj-20-1",
+      "licensePlate": "VIRA-NAJ-20-1",
+      "capacity": 23
+    },
+    {
+      "name": "راننده سرویس میدان آزادی اصفهان 2",
+      "username": "vira-naj-20-2",
+      "licensePlate": "VIRA-NAJ-20-2",
+      "capacity": 32
+    },
+    {
+      "name": "راننده سرویس میدان آزادی اصفهان 3",
+      "username": "vira-naj-20-3",
+      "licensePlate": "VIRA-NAJ-20-3",
+      "capacity": 44
+    }
+  ],
+  "services": [
+    {
+      "originKey": "najafabad",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-01-1",
+      "licensePlate": "VIRA-NAJ-01-1",
+      "capacity": 23,
+      "departureTime": "07:10",
+      "priceToman": 23000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "najafabad",
+      "driverUsername": "vira-naj-01-1",
+      "licensePlate": "VIRA-NAJ-01-1",
+      "capacity": 23,
+      "departureTime": "12:15",
+      "priceToman": 23000
+    },
+    {
+      "originKey": "najafabad",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-01-2",
+      "licensePlate": "VIRA-NAJ-01-2",
+      "capacity": 32,
+      "departureTime": "08:20",
+      "priceToman": 15000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "najafabad",
+      "driverUsername": "vira-naj-01-2",
+      "licensePlate": "VIRA-NAJ-01-2",
+      "capacity": 32,
+      "departureTime": "14:45",
+      "priceToman": 15000
+    },
+    {
+      "originKey": "najafabad",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-01-3",
+      "licensePlate": "VIRA-NAJ-01-3",
+      "capacity": 44,
+      "departureTime": "09:30",
+      "priceToman": 10000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "najafabad",
+      "driverUsername": "vira-naj-01-3",
+      "licensePlate": "VIRA-NAJ-01-3",
+      "capacity": 44,
+      "departureTime": "17:15",
+      "priceToman": 10000
+    },
+    {
+      "originKey": "yazdanshahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-02-1",
+      "licensePlate": "VIRA-NAJ-02-1",
+      "capacity": 23,
+      "departureTime": "07:00",
+      "priceToman": 26000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "yazdanshahr",
+      "driverUsername": "vira-naj-02-1",
+      "licensePlate": "VIRA-NAJ-02-1",
+      "capacity": 23,
+      "departureTime": "12:25",
+      "priceToman": 26000
+    },
+    {
+      "originKey": "yazdanshahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-02-2",
+      "licensePlate": "VIRA-NAJ-02-2",
+      "capacity": 32,
+      "departureTime": "08:10",
+      "priceToman": 18000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "yazdanshahr",
+      "driverUsername": "vira-naj-02-2",
+      "licensePlate": "VIRA-NAJ-02-2",
+      "capacity": 32,
+      "departureTime": "14:55",
+      "priceToman": 18000
+    },
+    {
+      "originKey": "yazdanshahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-02-3",
+      "licensePlate": "VIRA-NAJ-02-3",
+      "capacity": 44,
+      "departureTime": "09:20",
+      "priceToman": 13000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "yazdanshahr",
+      "driverUsername": "vira-naj-02-3",
+      "licensePlate": "VIRA-NAJ-02-3",
+      "capacity": 44,
+      "departureTime": "17:25",
+      "priceToman": 13000
+    },
+    {
+      "originKey": "vilashahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-03-1",
+      "licensePlate": "VIRA-NAJ-03-1",
+      "capacity": 23,
+      "departureTime": "07:00",
+      "priceToman": 26000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "vilashahr",
+      "driverUsername": "vira-naj-03-1",
+      "licensePlate": "VIRA-NAJ-03-1",
+      "capacity": 23,
+      "departureTime": "12:35",
+      "priceToman": 26000
+    },
+    {
+      "originKey": "vilashahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-03-2",
+      "licensePlate": "VIRA-NAJ-03-2",
+      "capacity": 32,
+      "departureTime": "08:10",
+      "priceToman": 18000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "vilashahr",
+      "driverUsername": "vira-naj-03-2",
+      "licensePlate": "VIRA-NAJ-03-2",
+      "capacity": 32,
+      "departureTime": "15:05",
+      "priceToman": 18000
+    },
+    {
+      "originKey": "vilashahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-03-3",
+      "licensePlate": "VIRA-NAJ-03-3",
+      "capacity": 44,
+      "departureTime": "09:20",
+      "priceToman": 13000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "vilashahr",
+      "driverUsername": "vira-naj-03-3",
+      "licensePlate": "VIRA-NAJ-03-3",
+      "capacity": 44,
+      "departureTime": "17:35",
+      "priceToman": 13000
+    },
+    {
+      "originKey": "kahrizsang",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-04-1",
+      "licensePlate": "VIRA-NAJ-04-1",
+      "capacity": 23,
+      "departureTime": "06:55",
+      "priceToman": 30000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "kahrizsang",
+      "driverUsername": "vira-naj-04-1",
+      "licensePlate": "VIRA-NAJ-04-1",
+      "capacity": 23,
+      "departureTime": "12:45",
+      "priceToman": 30000
+    },
+    {
+      "originKey": "kahrizsang",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-04-2",
+      "licensePlate": "VIRA-NAJ-04-2",
+      "capacity": 32,
+      "departureTime": "08:05",
+      "priceToman": 22000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "kahrizsang",
+      "driverUsername": "vira-naj-04-2",
+      "licensePlate": "VIRA-NAJ-04-2",
+      "capacity": 32,
+      "departureTime": "15:15",
+      "priceToman": 22000
+    },
+    {
+      "originKey": "kahrizsang",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-04-3",
+      "licensePlate": "VIRA-NAJ-04-3",
+      "capacity": 44,
+      "departureTime": "09:15",
+      "priceToman": 17000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "kahrizsang",
+      "driverUsername": "vira-naj-04-3",
+      "licensePlate": "VIRA-NAJ-04-3",
+      "capacity": 44,
+      "departureTime": "17:45",
+      "priceToman": 17000
+    },
+    {
+      "originKey": "goldasht",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-05-1",
+      "licensePlate": "VIRA-NAJ-05-1",
+      "capacity": 23,
+      "departureTime": "07:00",
+      "priceToman": 28000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "goldasht",
+      "driverUsername": "vira-naj-05-1",
+      "licensePlate": "VIRA-NAJ-05-1",
+      "capacity": 23,
+      "departureTime": "12:15",
+      "priceToman": 28000
+    },
+    {
+      "originKey": "goldasht",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-05-2",
+      "licensePlate": "VIRA-NAJ-05-2",
+      "capacity": 32,
+      "departureTime": "08:10",
+      "priceToman": 20000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "goldasht",
+      "driverUsername": "vira-naj-05-2",
+      "licensePlate": "VIRA-NAJ-05-2",
+      "capacity": 32,
+      "departureTime": "14:45",
+      "priceToman": 20000
+    },
+    {
+      "originKey": "goldasht",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-05-3",
+      "licensePlate": "VIRA-NAJ-05-3",
+      "capacity": 44,
+      "departureTime": "09:20",
+      "priceToman": 15000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "goldasht",
+      "driverUsername": "vira-naj-05-3",
+      "licensePlate": "VIRA-NAJ-05-3",
+      "capacity": 44,
+      "departureTime": "17:15",
+      "priceToman": 15000
+    },
+    {
+      "originKey": "juzdan",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-06-1",
+      "licensePlate": "VIRA-NAJ-06-1",
+      "capacity": 23,
+      "departureTime": "06:50",
+      "priceToman": 30000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "juzdan",
+      "driverUsername": "vira-naj-06-1",
+      "licensePlate": "VIRA-NAJ-06-1",
+      "capacity": 23,
+      "departureTime": "12:25",
+      "priceToman": 30000
+    },
+    {
+      "originKey": "juzdan",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-06-2",
+      "licensePlate": "VIRA-NAJ-06-2",
+      "capacity": 32,
+      "departureTime": "08:00",
+      "priceToman": 22000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "juzdan",
+      "driverUsername": "vira-naj-06-2",
+      "licensePlate": "VIRA-NAJ-06-2",
+      "capacity": 32,
+      "departureTime": "14:55",
+      "priceToman": 22000
+    },
+    {
+      "originKey": "juzdan",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-06-3",
+      "licensePlate": "VIRA-NAJ-06-3",
+      "capacity": 44,
+      "departureTime": "09:10",
+      "priceToman": 17000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "juzdan",
+      "driverUsername": "vira-naj-06-3",
+      "licensePlate": "VIRA-NAJ-06-3",
+      "capacity": 44,
+      "departureTime": "17:25",
+      "priceToman": 17000
+    },
+    {
+      "originKey": "tiran",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-07-1",
+      "licensePlate": "VIRA-NAJ-07-1",
+      "capacity": 23,
+      "departureTime": "06:40",
+      "priceToman": 43000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "tiran",
+      "driverUsername": "vira-naj-07-1",
+      "licensePlate": "VIRA-NAJ-07-1",
+      "capacity": 23,
+      "departureTime": "12:35",
+      "priceToman": 43000
+    },
+    {
+      "originKey": "tiran",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-07-2",
+      "licensePlate": "VIRA-NAJ-07-2",
+      "capacity": 32,
+      "departureTime": "07:50",
+      "priceToman": 35000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "tiran",
+      "driverUsername": "vira-naj-07-2",
+      "licensePlate": "VIRA-NAJ-07-2",
+      "capacity": 32,
+      "departureTime": "15:05",
+      "priceToman": 35000
+    },
+    {
+      "originKey": "tiran",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-07-3",
+      "licensePlate": "VIRA-NAJ-07-3",
+      "capacity": 44,
+      "departureTime": "09:00",
+      "priceToman": 30000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "tiran",
+      "driverUsername": "vira-naj-07-3",
+      "licensePlate": "VIRA-NAJ-07-3",
+      "capacity": 44,
+      "departureTime": "17:35",
+      "priceToman": 30000
+    },
+    {
+      "originKey": "khomeinishahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-08-1",
+      "licensePlate": "VIRA-NAJ-08-1",
+      "capacity": 23,
+      "departureTime": "06:40",
+      "priceToman": 38000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "khomeinishahr",
+      "driverUsername": "vira-naj-08-1",
+      "licensePlate": "VIRA-NAJ-08-1",
+      "capacity": 23,
+      "departureTime": "12:45",
+      "priceToman": 38000
+    },
+    {
+      "originKey": "khomeinishahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-08-2",
+      "licensePlate": "VIRA-NAJ-08-2",
+      "capacity": 32,
+      "departureTime": "07:50",
+      "priceToman": 30000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "khomeinishahr",
+      "driverUsername": "vira-naj-08-2",
+      "licensePlate": "VIRA-NAJ-08-2",
+      "capacity": 32,
+      "departureTime": "15:15",
+      "priceToman": 30000
+    },
+    {
+      "originKey": "khomeinishahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-08-3",
+      "licensePlate": "VIRA-NAJ-08-3",
+      "capacity": 44,
+      "departureTime": "09:00",
+      "priceToman": 25000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "khomeinishahr",
+      "driverUsername": "vira-naj-08-3",
+      "licensePlate": "VIRA-NAJ-08-3",
+      "capacity": 44,
+      "departureTime": "17:45",
+      "priceToman": 25000
+    },
+    {
+      "originKey": "dorcheh",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-09-1",
+      "licensePlate": "VIRA-NAJ-09-1",
+      "capacity": 23,
+      "departureTime": "06:35",
+      "priceToman": 43000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "dorcheh",
+      "driverUsername": "vira-naj-09-1",
+      "licensePlate": "VIRA-NAJ-09-1",
+      "capacity": 23,
+      "departureTime": "12:15",
+      "priceToman": 43000
+    },
+    {
+      "originKey": "dorcheh",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-09-2",
+      "licensePlate": "VIRA-NAJ-09-2",
+      "capacity": 32,
+      "departureTime": "07:45",
+      "priceToman": 35000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "dorcheh",
+      "driverUsername": "vira-naj-09-2",
+      "licensePlate": "VIRA-NAJ-09-2",
+      "capacity": 32,
+      "departureTime": "14:45",
+      "priceToman": 35000
+    },
+    {
+      "originKey": "dorcheh",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-09-3",
+      "licensePlate": "VIRA-NAJ-09-3",
+      "capacity": 44,
+      "departureTime": "08:55",
+      "priceToman": 30000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "dorcheh",
+      "driverUsername": "vira-naj-09-3",
+      "licensePlate": "VIRA-NAJ-09-3",
+      "capacity": 44,
+      "departureTime": "17:15",
+      "priceToman": 30000
+    },
+    {
+      "originKey": "fooladshahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-10-1",
+      "licensePlate": "VIRA-NAJ-10-1",
+      "capacity": 23,
+      "departureTime": "06:25",
+      "priceToman": 48000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "fooladshahr",
+      "driverUsername": "vira-naj-10-1",
+      "licensePlate": "VIRA-NAJ-10-1",
+      "capacity": 23,
+      "departureTime": "12:25",
+      "priceToman": 48000
+    },
+    {
+      "originKey": "fooladshahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-10-2",
+      "licensePlate": "VIRA-NAJ-10-2",
+      "capacity": 32,
+      "departureTime": "07:35",
+      "priceToman": 40000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "fooladshahr",
+      "driverUsername": "vira-naj-10-2",
+      "licensePlate": "VIRA-NAJ-10-2",
+      "capacity": 32,
+      "departureTime": "14:55",
+      "priceToman": 40000
+    },
+    {
+      "originKey": "fooladshahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-10-3",
+      "licensePlate": "VIRA-NAJ-10-3",
+      "capacity": 44,
+      "departureTime": "08:45",
+      "priceToman": 35000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "fooladshahr",
+      "driverUsername": "vira-naj-10-3",
+      "licensePlate": "VIRA-NAJ-10-3",
+      "capacity": 44,
+      "departureTime": "17:25",
+      "priceToman": 35000
+    },
+    {
+      "originKey": "falavarjan",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-11-1",
+      "licensePlate": "VIRA-NAJ-11-1",
+      "capacity": 23,
+      "departureTime": "06:25",
+      "priceToman": 48000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "falavarjan",
+      "driverUsername": "vira-naj-11-1",
+      "licensePlate": "VIRA-NAJ-11-1",
+      "capacity": 23,
+      "departureTime": "12:35",
+      "priceToman": 48000
+    },
+    {
+      "originKey": "falavarjan",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-11-2",
+      "licensePlate": "VIRA-NAJ-11-2",
+      "capacity": 32,
+      "departureTime": "07:35",
+      "priceToman": 40000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "falavarjan",
+      "driverUsername": "vira-naj-11-2",
+      "licensePlate": "VIRA-NAJ-11-2",
+      "capacity": 32,
+      "departureTime": "15:05",
+      "priceToman": 40000
+    },
+    {
+      "originKey": "falavarjan",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-11-3",
+      "licensePlate": "VIRA-NAJ-11-3",
+      "capacity": 44,
+      "departureTime": "08:45",
+      "priceToman": 35000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "falavarjan",
+      "driverUsername": "vira-naj-11-3",
+      "licensePlate": "VIRA-NAJ-11-3",
+      "capacity": 44,
+      "departureTime": "17:35",
+      "priceToman": 35000
+    },
+    {
+      "originKey": "qahderijan",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-12-1",
+      "licensePlate": "VIRA-NAJ-12-1",
+      "capacity": 23,
+      "departureTime": "06:35",
+      "priceToman": 43000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "qahderijan",
+      "driverUsername": "vira-naj-12-1",
+      "licensePlate": "VIRA-NAJ-12-1",
+      "capacity": 23,
+      "departureTime": "12:45",
+      "priceToman": 43000
+    },
+    {
+      "originKey": "qahderijan",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-12-2",
+      "licensePlate": "VIRA-NAJ-12-2",
+      "capacity": 32,
+      "departureTime": "07:45",
+      "priceToman": 35000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "qahderijan",
+      "driverUsername": "vira-naj-12-2",
+      "licensePlate": "VIRA-NAJ-12-2",
+      "capacity": 32,
+      "departureTime": "15:15",
+      "priceToman": 35000
+    },
+    {
+      "originKey": "qahderijan",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-12-3",
+      "licensePlate": "VIRA-NAJ-12-3",
+      "capacity": 44,
+      "departureTime": "08:55",
+      "priceToman": 30000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "qahderijan",
+      "driverUsername": "vira-naj-12-3",
+      "licensePlate": "VIRA-NAJ-12-3",
+      "capacity": 44,
+      "departureTime": "17:45",
+      "priceToman": 30000
+    },
+    {
+      "originKey": "zarrinshahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-13-1",
+      "licensePlate": "VIRA-NAJ-13-1",
+      "capacity": 23,
+      "departureTime": "06:10",
+      "priceToman": 58000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "zarrinshahr",
+      "driverUsername": "vira-naj-13-1",
+      "licensePlate": "VIRA-NAJ-13-1",
+      "capacity": 23,
+      "departureTime": "12:15",
+      "priceToman": 58000
+    },
+    {
+      "originKey": "zarrinshahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-13-2",
+      "licensePlate": "VIRA-NAJ-13-2",
+      "capacity": 32,
+      "departureTime": "07:20",
+      "priceToman": 50000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "zarrinshahr",
+      "driverUsername": "vira-naj-13-2",
+      "licensePlate": "VIRA-NAJ-13-2",
+      "capacity": 32,
+      "departureTime": "14:45",
+      "priceToman": 50000
+    },
+    {
+      "originKey": "zarrinshahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-13-3",
+      "licensePlate": "VIRA-NAJ-13-3",
+      "capacity": 44,
+      "departureTime": "08:30",
+      "priceToman": 45000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "zarrinshahr",
+      "driverUsername": "vira-naj-13-3",
+      "licensePlate": "VIRA-NAJ-13-3",
+      "capacity": 44,
+      "departureTime": "17:15",
+      "priceToman": 45000
+    },
+    {
+      "originKey": "shahinshahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-14-1",
+      "licensePlate": "VIRA-NAJ-14-1",
+      "capacity": 23,
+      "departureTime": "06:15",
+      "priceToman": 58000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "shahinshahr",
+      "driverUsername": "vira-naj-14-1",
+      "licensePlate": "VIRA-NAJ-14-1",
+      "capacity": 23,
+      "departureTime": "12:25",
+      "priceToman": 58000
+    },
+    {
+      "originKey": "shahinshahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-14-2",
+      "licensePlate": "VIRA-NAJ-14-2",
+      "capacity": 32,
+      "departureTime": "07:25",
+      "priceToman": 50000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "shahinshahr",
+      "driverUsername": "vira-naj-14-2",
+      "licensePlate": "VIRA-NAJ-14-2",
+      "capacity": 32,
+      "departureTime": "14:55",
+      "priceToman": 50000
+    },
+    {
+      "originKey": "shahinshahr",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-14-3",
+      "licensePlate": "VIRA-NAJ-14-3",
+      "capacity": 44,
+      "departureTime": "08:35",
+      "priceToman": 45000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "shahinshahr",
+      "driverUsername": "vira-naj-14-3",
+      "licensePlate": "VIRA-NAJ-14-3",
+      "capacity": 44,
+      "departureTime": "17:25",
+      "priceToman": 45000
+    },
+    {
+      "originKey": "mobarakeh",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-15-1",
+      "licensePlate": "VIRA-NAJ-15-1",
+      "capacity": 23,
+      "departureTime": "06:00",
+      "priceToman": 68000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "mobarakeh",
+      "driverUsername": "vira-naj-15-1",
+      "licensePlate": "VIRA-NAJ-15-1",
+      "capacity": 23,
+      "departureTime": "12:35",
+      "priceToman": 68000
+    },
+    {
+      "originKey": "mobarakeh",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-15-2",
+      "licensePlate": "VIRA-NAJ-15-2",
+      "capacity": 32,
+      "departureTime": "07:10",
+      "priceToman": 60000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "mobarakeh",
+      "driverUsername": "vira-naj-15-2",
+      "licensePlate": "VIRA-NAJ-15-2",
+      "capacity": 32,
+      "departureTime": "15:05",
+      "priceToman": 60000
+    },
+    {
+      "originKey": "mobarakeh",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-15-3",
+      "licensePlate": "VIRA-NAJ-15-3",
+      "capacity": 44,
+      "departureTime": "08:20",
+      "priceToman": 55000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "mobarakeh",
+      "driverUsername": "vira-naj-15-3",
+      "licensePlate": "VIRA-NAJ-15-3",
+      "capacity": 44,
+      "departureTime": "17:35",
+      "priceToman": 55000
+    },
+    {
+      "originKey": "dolatabad",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-16-1",
+      "licensePlate": "VIRA-NAJ-16-1",
+      "capacity": 23,
+      "departureTime": "06:10",
+      "priceToman": 63000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "dolatabad",
+      "driverUsername": "vira-naj-16-1",
+      "licensePlate": "VIRA-NAJ-16-1",
+      "capacity": 23,
+      "departureTime": "12:45",
+      "priceToman": 63000
+    },
+    {
+      "originKey": "dolatabad",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-16-2",
+      "licensePlate": "VIRA-NAJ-16-2",
+      "capacity": 32,
+      "departureTime": "07:20",
+      "priceToman": 55000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "dolatabad",
+      "driverUsername": "vira-naj-16-2",
+      "licensePlate": "VIRA-NAJ-16-2",
+      "capacity": 32,
+      "departureTime": "15:15",
+      "priceToman": 55000
+    },
+    {
+      "originKey": "dolatabad",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-16-3",
+      "licensePlate": "VIRA-NAJ-16-3",
+      "capacity": 44,
+      "departureTime": "08:30",
+      "priceToman": 50000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "dolatabad",
+      "driverUsername": "vira-naj-16-3",
+      "licensePlate": "VIRA-NAJ-16-3",
+      "capacity": 44,
+      "departureTime": "17:45",
+      "priceToman": 50000
+    },
+    {
+      "originKey": "baharestan",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-17-1",
+      "licensePlate": "VIRA-NAJ-17-1",
+      "capacity": 23,
+      "departureTime": "06:00",
+      "priceToman": 68000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "baharestan",
+      "driverUsername": "vira-naj-17-1",
+      "licensePlate": "VIRA-NAJ-17-1",
+      "capacity": 23,
+      "departureTime": "12:15",
+      "priceToman": 68000
+    },
+    {
+      "originKey": "baharestan",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-17-2",
+      "licensePlate": "VIRA-NAJ-17-2",
+      "capacity": 32,
+      "departureTime": "07:10",
+      "priceToman": 60000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "baharestan",
+      "driverUsername": "vira-naj-17-2",
+      "licensePlate": "VIRA-NAJ-17-2",
+      "capacity": 32,
+      "departureTime": "14:45",
+      "priceToman": 60000
+    },
+    {
+      "originKey": "baharestan",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-17-3",
+      "licensePlate": "VIRA-NAJ-17-3",
+      "capacity": 44,
+      "departureTime": "08:20",
+      "priceToman": 55000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "baharestan",
+      "driverUsername": "vira-naj-17-3",
+      "licensePlate": "VIRA-NAJ-17-3",
+      "capacity": 44,
+      "departureTime": "17:15",
+      "priceToman": 55000
+    },
+    {
+      "originKey": "isfahan-kaveh",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-18-1",
+      "licensePlate": "VIRA-NAJ-18-1",
+      "capacity": 23,
+      "departureTime": "06:20",
+      "priceToman": 53000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "isfahan-kaveh",
+      "driverUsername": "vira-naj-18-1",
+      "licensePlate": "VIRA-NAJ-18-1",
+      "capacity": 23,
+      "departureTime": "12:25",
+      "priceToman": 53000
+    },
+    {
+      "originKey": "isfahan-kaveh",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-18-2",
+      "licensePlate": "VIRA-NAJ-18-2",
+      "capacity": 32,
+      "departureTime": "07:30",
+      "priceToman": 45000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "isfahan-kaveh",
+      "driverUsername": "vira-naj-18-2",
+      "licensePlate": "VIRA-NAJ-18-2",
+      "capacity": 32,
+      "departureTime": "14:55",
+      "priceToman": 45000
+    },
+    {
+      "originKey": "isfahan-kaveh",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-18-3",
+      "licensePlate": "VIRA-NAJ-18-3",
+      "capacity": 44,
+      "departureTime": "08:40",
+      "priceToman": 40000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "isfahan-kaveh",
+      "driverUsername": "vira-naj-18-3",
+      "licensePlate": "VIRA-NAJ-18-3",
+      "capacity": 44,
+      "departureTime": "17:25",
+      "priceToman": 40000
+    },
+    {
+      "originKey": "isfahan-soffeh",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-19-1",
+      "licensePlate": "VIRA-NAJ-19-1",
+      "capacity": 23,
+      "departureTime": "06:20",
+      "priceToman": 53000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "isfahan-soffeh",
+      "driverUsername": "vira-naj-19-1",
+      "licensePlate": "VIRA-NAJ-19-1",
+      "capacity": 23,
+      "departureTime": "12:35",
+      "priceToman": 53000
+    },
+    {
+      "originKey": "isfahan-soffeh",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-19-2",
+      "licensePlate": "VIRA-NAJ-19-2",
+      "capacity": 32,
+      "departureTime": "07:30",
+      "priceToman": 45000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "isfahan-soffeh",
+      "driverUsername": "vira-naj-19-2",
+      "licensePlate": "VIRA-NAJ-19-2",
+      "capacity": 32,
+      "departureTime": "15:05",
+      "priceToman": 45000
+    },
+    {
+      "originKey": "isfahan-soffeh",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-19-3",
+      "licensePlate": "VIRA-NAJ-19-3",
+      "capacity": 44,
+      "departureTime": "08:40",
+      "priceToman": 40000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "isfahan-soffeh",
+      "driverUsername": "vira-naj-19-3",
+      "licensePlate": "VIRA-NAJ-19-3",
+      "capacity": 44,
+      "departureTime": "17:35",
+      "priceToman": 40000
+    },
+    {
+      "originKey": "isfahan-azadi",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-20-1",
+      "licensePlate": "VIRA-NAJ-20-1",
+      "capacity": 23,
+      "departureTime": "06:25",
+      "priceToman": 48000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "isfahan-azadi",
+      "driverUsername": "vira-naj-20-1",
+      "licensePlate": "VIRA-NAJ-20-1",
+      "capacity": 23,
+      "departureTime": "12:45",
+      "priceToman": 48000
+    },
+    {
+      "originKey": "isfahan-azadi",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-20-2",
+      "licensePlate": "VIRA-NAJ-20-2",
+      "capacity": 32,
+      "departureTime": "07:35",
+      "priceToman": 40000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "isfahan-azadi",
+      "driverUsername": "vira-naj-20-2",
+      "licensePlate": "VIRA-NAJ-20-2",
+      "capacity": 32,
+      "departureTime": "15:15",
+      "priceToman": 40000
+    },
+    {
+      "originKey": "isfahan-azadi",
+      "destinationKey": "najafabad-university",
+      "driverUsername": "vira-naj-20-3",
+      "licensePlate": "VIRA-NAJ-20-3",
+      "capacity": 44,
+      "departureTime": "08:45",
+      "priceToman": 35000
+    },
+    {
+      "originKey": "najafabad-university",
+      "destinationKey": "isfahan-azadi",
+      "driverUsername": "vira-naj-20-3",
+      "licensePlate": "VIRA-NAJ-20-3",
+      "capacity": 44,
+      "departureTime": "17:45",
+      "priceToman": 35000
+    }
+  ]
+}

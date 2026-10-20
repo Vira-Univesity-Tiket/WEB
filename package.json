@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "tsx --test tests/*.test.ts",
-    "test:integration": "node --test tests/api.integration.test.mjs",
+    "test:integration": "node --test tests/api.integration.test.mjs tests/catalog.integration.test.mjs",
+    "catalog:najafabad": "node backend/scripts/import-najafabad-services.mjs",
     "test:browser": "playwright test"
   },
   "dependencies": {
