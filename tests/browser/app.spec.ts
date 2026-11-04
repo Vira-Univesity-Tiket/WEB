@@ -351,6 +351,7 @@ test('camera denial keeps manual entry available and closing stops a late camera
 
 test('customer screens have no serious WCAG issues or horizontal overflow', async ({ page }) => {
   const audit = async (name: string) => {
+    await expect(page.locator('.student-toast-surface p')).toHaveCount(0, { timeout: 6000 });
     await page.evaluate(async () => {
       await document.fonts.ready;
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -377,6 +378,40 @@ test('customer screens have no serious WCAG issues or horizontal overflow', asyn
   }
   await page.getByRole('button', { name: 'حساب کاربری', exact: true }).click();
   await audit('profile');
+});
+
+test('wallet balances remain readable beside the illustration at all supported widths', async ({ page }) => {
+  let balance = '۹۰٬۰۰۰ تومان';
+  // Only this presentation test replaces the displayed profile amount; no money is credited.
+  await page.route('**/api1/auth/me', async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), balance } });
+  });
+  await login(page);
+  await page.getByRole('navigation', { name: 'پیمایش اصلی' }).getByRole('button', { name: 'کیف پول', exact: true }).click();
+  for (const [name, value] of [['regular', '۹۰٬۰۰۰ تومان'], ['long', '۹٬۸۷۶٬۵۴۳٬۲۱۰ تومان']]) {
+    balance = value;
+    await page.reload();
+    await expect(page.locator('.student-wallet-balance')).toHaveText(balance);
+    for (const width of [360, 390, 430, 768, 1280]) {
+      await page.setViewportSize({ width, height: width >= 768 ? 1000 : 844 });
+      await page.evaluate(() => document.fonts.ready);
+      const layout = await page.locator('.student-wallet-card').evaluate(card => {
+        const amount = card.querySelector('.student-wallet-balance')!;
+        const range = document.createRange(); range.selectNodeContents(amount);
+        const text = range.getBoundingClientRect();
+        const art = card.querySelector('.student-wallet-art')!.getBoundingClientRect();
+        const bounds = card.getBoundingClientRect();
+        return {
+          overlap: Math.min(text.right, art.right) - Math.max(text.left, art.left) > 1 && Math.min(text.bottom, art.bottom) - Math.max(text.top, art.top) > 1,
+          textWithinCard: text.left >= bounds.left && text.right <= bounds.right,
+          horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
+        };
+      });
+      expect(layout, `${name} balance at ${width}px`).toEqual({ overlap: false, textWithinCard: true, horizontalOverflow: false });
+      await page.screenshot({ path: `test-results/wallet-${name}-${width}.png`, fullPage: true });
+    }
+  }
 });
 
 test('a late profile response cannot restore cached personal data after logout', async ({ page }) => {

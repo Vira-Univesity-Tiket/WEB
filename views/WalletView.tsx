@@ -131,6 +131,7 @@ const WalletView: React.FC<WalletViewProps> = ({
     };
   }, [pendingTransaction, paymentCheck]);
 
+  const balanceText = formatPersianTextNumbers(userProfile.balance);
   const amount = Number(amountDigits);
   const amountError =
     !Number.isSafeInteger(amount) || amount < 10_000
@@ -239,9 +240,12 @@ const WalletView: React.FC<WalletViewProps> = ({
         />
         <div className="student-hero-text">
           <h2>موجودی فعلی</h2>
-          <div className="student-wallet-balance">
+          <div
+            className="student-wallet-balance"
+            data-compact={balanceText.length > 16 ? "true" : undefined}
+          >
             {balanceResource.status === "ready" ? (
-              formatPersianTextNumbers(userProfile.balance)
+              balanceText
             ) : balanceResource.status === "error" ? (
               <span className="student-wallet-unavailable">
                 دریافت موجودی ناموفق بود

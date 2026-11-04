@@ -1545,14 +1545,13 @@ textarea.student-input {
 }
 .student-wallet-card {
   min-height: 214px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 20px 12px;
   padding: 24px 20px;
 }
 .student-wallet-card .student-hero-text {
-  width: 58%;
+  width: auto;
   min-height: 100px;
 }
 .student-wallet-card h2 {
@@ -1566,7 +1565,12 @@ textarea.student-input {
   margin-top: 12px;
   overflow-wrap: anywhere;
 }
+.student-wallet-balance[data-compact="true"] {
+  font-size: clamp(20px, 5.6vw, 31px);
+}
 .student-wallet-card .student-button {
+  grid-column: 1 / -1;
+  grid-row: 2;
   position: relative;
   z-index: 2;
   width: 100%;
@@ -1575,13 +1579,12 @@ textarea.student-input {
   font-size: 17px;
 }
 .student-wallet-art {
-  width: 37%;
+  grid-area: 1 / 2;
+  width: 100%;
   height: auto;
   max-height: 130px;
   object-fit: contain;
-  position: absolute;
-  inset-inline-end: 6%;
-  top: 36px;
+  position: relative;
   z-index: 1;
 }
 .student-transaction {
