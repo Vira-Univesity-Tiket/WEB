@@ -623,7 +623,9 @@ export const downloadAuthenticatedFile = async (url: string, fallbackFilename: s
   const headers = new Headers();
   const token = findTokenForAbsoluteUrl(url);
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  const response = await fetchWithTimeout(url, { method: 'GET', headers, timeout: 40000 });
+  // Download URL builders already include the API base; resolve as same-origin to avoid prefixing it twice.
+  const resourceUrl = new URL(url, window.location.origin).href;
+  const response = await fetchWithTimeout(resourceUrl, { method: 'GET', headers, timeout: 40000 });
   if (!response.ok) {
     await asJson(response, 'دانلود فایل ناموفق بود');
     return;

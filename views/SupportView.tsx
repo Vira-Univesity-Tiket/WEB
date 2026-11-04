@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Icons } from '../components/Icons';
+import React, { useEffect, useRef, useState } from "react";
+import { Icons } from "../components/Icons";
 import {
   createSupportTicket,
   getSupportTicketDetail,
@@ -7,480 +7,514 @@ import {
   replySupportTicket,
   supportAttachmentDownloadUrl,
   supportTicketTxtUrl,
-  downloadAuthenticatedFile
-} from '../services/apiService';
-import type { SupportTicketDetail, SupportTicketListItem, SupportTicketStatus } from '../types';
-import { toEnglishDigits } from '../utils/numberUtils';
+  downloadAuthenticatedFile,
+} from "../services/apiService";
+import type {
+  SupportTicketDetail,
+  SupportTicketListItem,
+  SupportTicketStatus,
+} from "../types";
+import {
+  Button,
+  EmptyState,
+  Field,
+  IconButton,
+  PageHeader,
+  SegmentedTabs,
+  StatusMessage,
+  StudentPage,
+} from "../components/student/StudentUI";
+import AttachmentPicker from "../components/student/AttachmentPicker";
+import {
+  StudentAttachment,
+  supportAttachmentPayload,
+} from "../utils/studentAttachments";
+import { formatAmountFa } from "../utils/numberUtils";
 
 interface SupportViewProps {
   onBack: () => void;
+  onMessages?: () => void;
 }
-
-const statusMeta: Record<SupportTicketStatus, { label: string; cls: string }> = {
-  open: { label: 'باز', cls: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
-  in_progress: { label: 'درحال بررسی', cls: 'bg-amber-50 text-amber-700 border-amber-100' },
-  answered: { label: 'پاسخ داده شده', cls: 'bg-blue-50 text-blue-700 border-blue-100' },
-  closed: { label: 'بسته شده', cls: 'bg-gray-100 text-gray-600 border-gray-200' }
+const statuses: Record<SupportTicketStatus, string> = {
+  open: "باز",
+  in_progress: "در حال بررسی",
+  answered: "پاسخ داده شده",
+  closed: "بسته شده",
 };
 
-const canUploadMime = (mime: string) => ['image/png', 'image/jpeg', 'image/webp', 'application/pdf', 'text/plain'].includes(mime);
-
-const SupportView: React.FC<SupportViewProps> = ({ onBack }) => {
-  const [tab, setTab] = useState<'active' | 'closed'>('active');
-  const [mode, setMode] = useState<'list' | 'detail' | 'create'>('list');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-
+const SupportView: React.FC<SupportViewProps> = ({ onBack, onMessages }) => {
+  const [tab, setTab] = useState<"active" | "closed">("active");
+  const [mode, setMode] = useState<"list" | "create" | "detail">("list");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [readingFiles, setReadingFiles] = useState(false);
+  const [listError, setListError] = useState("");
+  const [detailError, setDetailError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [notice, setNotice] = useState("");
   const [tickets, setTickets] = useState<SupportTicketListItem[]>([]);
   const [selected, setSelected] = useState<SupportTicketDetail | null>(null);
-
-  // Create form
-  const [title, setTitle] = useState('');
-  const [desc, setDesc] = useState('');
-  const [files, setFiles] = useState<{ name: string; dataUrl: string }[]>([]);
-
-  // Reply form
-  const [reply, setReply] = useState('');
-  const [replyFiles, setReplyFiles] = useState<{ name: string; dataUrl: string }[]>([]);
-  const bottomRef = useRef<HTMLDivElement>(null);
-
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [files, setFiles] = useState<StudentAttachment[]>([]);
+  const [reply, setReply] = useState("");
+  const [replyFiles, setReplyFiles] = useState<StudentAttachment[]>([]);
+  const [touched, setTouched] = useState(false);
+  const listRequest = useRef(0);
+  const detailRequest = useRef(0);
+  const lastTicketId = useRef("");
+  const saveBusy = useRef(false);
+  const mounted = useRef(true);
+  const bottom = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      listRequest.current += 1;
+      detailRequest.current += 1;
+    };
+  }, []);
   const loadTickets = async () => {
+    const request = ++listRequest.current;
     setLoading(true);
-    setMessage('');
+    setListError("");
     try {
       const data = await listSupportTickets(tab);
-      setTickets(data);
-    } catch (e: any) {
-      setMessage(e?.message || 'دریافت تیکت‌ها ناموفق بود');
+      if (!Array.isArray(data))
+        throw new Error("پاسخ فهرست تیکت‌ها معتبر نیست.");
+      if (request === listRequest.current && mounted.current) setTickets(data);
+    } catch (error) {
+      if (request === listRequest.current && mounted.current)
+        setListError((error as Error).message || "دریافت تیکت‌ها ناموفق بود.");
     } finally {
-      setLoading(false);
+      if (request === listRequest.current && mounted.current) setLoading(false);
     }
   };
-
   useEffect(() => {
-    if (mode === 'list') loadTickets();
+    if (mode === "list") void loadTickets();
+    return () => {
+      listRequest.current += 1;
+    };
   }, [tab, mode]);
-
   const openTicket = async (id: string) => {
+    const request = ++detailRequest.current;
+    lastTicketId.current = id;
     setLoading(true);
-    setMessage('');
+    setDetailError("");
+    setMode("detail");
     try {
       const data = await getSupportTicketDetail(id);
-      setSelected(data);
-      setMode('detail');
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-    } catch (e: any) {
-      setMessage(e?.message || 'دریافت تیکت ناموفق بود');
+      if (request === detailRequest.current && mounted.current)
+        setSelected(data);
+    } catch (error) {
+      if (request === detailRequest.current && mounted.current)
+        setDetailError((error as Error).message || "دریافت جزئیات ناموفق بود.");
     } finally {
-      setLoading(false);
+      if (request === detailRequest.current && mounted.current)
+        setLoading(false);
     }
   };
-
-  const readFiles = async (fileList: FileList, set: React.Dispatch<React.SetStateAction<{ name: string; dataUrl: string }[]>>) => {
-    const previous = set === setReplyFiles ? replyFiles : files;
-    const arr = Array.from(fileList);
-    if (arr.length + previous.length > 5) { setMessage('حداکثر ۵ فایل برای هر پیام مجاز است.'); return; }
-    const existingBytes = previous.reduce((total, file) => total + (file.dataUrl.split(',')[1]?.length || 0) * 0.75, 0);
-    if (existingBytes + arr.reduce((total, file) => total + file.size, 0) > 8 * 1024 * 1024) { setMessage('مجموع فایل‌های هر پیام باید حداکثر ۸ مگابایت باشد.'); return; }
-    const results: { name: string; dataUrl: string }[] = [];
-
-    for (const f of arr) {
-      if (f.size > 5 * 1024 * 1024) {
-        setMessage('حجم هر فایل باید کمتر از ۵ مگابایت باشد.');
-        continue;
-      }
-      if (!canUploadMime(f.type)) {
-        setMessage('فرمت فایل مجاز نیست. (png/jpg/webp/pdf/txt)');
-        continue;
-      }
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = () => reject(new Error('file read failed'));
-        reader.readAsDataURL(f);
+  useEffect(() => {
+    if (mode === "detail" && selected)
+      bottom.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+        block: "nearest",
       });
-      results.push({ name: f.name, dataUrl });
+  }, [selected, mode]);
+  const back = () => {
+    if (saveBusy.current) return;
+    if (mode === "list") {
+      onBack();
+      return;
     }
-    set((prev) => [...prev, ...results].slice(0, 5));
+    detailRequest.current += 1;
+    setMode("list");
+    setSelected(null);
+    setDetailError("");
+    setFormError("");
+    setNotice("");
   };
-
-  const removeFile = (idx: number, set: React.Dispatch<React.SetStateAction<any[]>>) => {
-    set((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  const handleDownload = async (url: string, fallbackFilename: string) => {
-    setMessage('');
+  const submitTicket = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setTouched(true);
+    setFormError("");
+    if (
+      !title.trim() ||
+      !description.trim() ||
+      saveBusy.current ||
+      readingFiles
+    )
+      return;
+    saveBusy.current = true;
+    setSaving(true);
     try {
-      await downloadAuthenticatedFile(url, fallbackFilename);
-    } catch (e: any) {
-      setMessage(e?.message || 'دانلود فایل ناموفق بود');
-    }
-  };
-
-  const submitTicket = async () => {
-    setLoading(true);
-    setMessage('');
-    try {
-      const t = title.trim();
-      const d = desc.trim();
-      if (!t || !d) {
-        setMessage('عنوان و توضیحات الزامی است.');
-        return;
-      }
-      const created = await createSupportTicket({ title: t, message: d, attachments: files });
-      setTitle('');
-      setDesc('');
+      const result = await createSupportTicket({
+        title: title.trim(),
+        message: description.trim(),
+        attachments: supportAttachmentPayload(files),
+      });
+      if (!mounted.current) return;
+      setTitle("");
+      setDescription("");
       setFiles([]);
-      setMessage('تیکت با موفقیت ثبت شد.');
-      setMode('list');
-      await openTicket(created.ticket.id);
-    } catch (e: any) {
-      setMessage(e?.message || 'ثبت تیکت ناموفق بود');
+      setTouched(false);
+      setNotice("تیکت با موفقیت ثبت شد.");
+      await openTicket(result.ticket.id);
+    } catch (error) {
+      if (mounted.current)
+        setFormError((error as Error).message || "ثبت تیکت ناموفق بود.");
     } finally {
-      setLoading(false);
+      saveBusy.current = false;
+      if (mounted.current) setSaving(false);
     }
   };
-
-  const submitReply = async () => {
-    if (!selected) return;
-    setLoading(true);
-    setMessage('');
+  const submitReply = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setFormError("");
+    if (!selected || saveBusy.current || readingFiles) return;
+    if (!reply.trim()) {
+      setFormError("متن پاسخ الزامی است.");
+      return;
+    }
+    saveBusy.current = true;
+    setSaving(true);
     try {
-      const text = reply.trim();
-      if (!text) {
-        setMessage('متن پیام الزامی است.');
-        return;
-      }
-      await replySupportTicket(selected.id, { message: text, attachments: replyFiles });
-      setReply('');
+      await replySupportTicket(selected.id, {
+        message: reply.trim(),
+        attachments: supportAttachmentPayload(replyFiles),
+      });
+      if (!mounted.current) return;
+      setReply("");
       setReplyFiles([]);
+      setNotice("پیام شما ثبت شد.");
       await openTicket(selected.id);
-    } catch (e: any) {
-      setMessage(e?.message || 'ارسال پیام ناموفق بود');
+    } catch (error) {
+      if (mounted.current)
+        setFormError((error as Error).message || "ارسال پاسخ ناموفق بود.");
     } finally {
-      setLoading(false);
+      saveBusy.current = false;
+      if (mounted.current) setSaving(false);
     }
   };
-
-  const headerTitle = mode === 'create' ? 'ثبت تیکت جدید' : mode === 'detail' ? 'جزئیات تیکت' : 'پشتیبانی (تیکت)';
-
-  const canReply = selected && selected.status !== 'closed';
-
-  const listEmptyText = tab === 'active' ? 'تیکت فعالی ندارید.' : 'تیکت بسته‌شده‌ای ندارید.';
-
-  const ticketBadge = (status: SupportTicketStatus) => (
-    <span className={`text-[10px] px-2 py-1 rounded-lg border font-bold ${statusMeta[status].cls}`}>
-      {statusMeta[status].label}
+  const download = async (url: string, name: string) => {
+    try {
+      await downloadAuthenticatedFile(url, name);
+    } catch (error) {
+      if (mounted.current)
+        setFormError((error as Error).message || "دانلود ناموفق بود.");
+    }
+  };
+  const heading =
+    mode === "create"
+      ? "ثبت تیکت جدید"
+      : mode === "detail"
+        ? "جزئیات تیکت"
+        : "پشتیبانی (تیکت)";
+  const create = () => {
+    if (saveBusy.current) return;
+    detailRequest.current += 1;
+    setMode("create");
+    setNotice("");
+    setFormError("");
+  };
+  const badge = (status: SupportTicketStatus) => (
+    <span className="student-badge" data-status={status}>
+      {statuses[status]}
     </span>
   );
 
-  const topActions = useMemo(
-    () => (
-      <div className="flex items-center gap-2">
-        {mode !== 'create' && (
-          <button
-            onClick={() => { setMode('create'); setMessage(''); }}
-            className="px-3 py-2 rounded-xl bg-vira-primary text-white text-xs font-bold shadow-sm active:scale-95 transition-transform"
-          >
-            <span className="flex items-center gap-2">
-              <Icons.Plus size={16} />
-              تیکت جدید
-            </span>
-          </button>
-        )}
-      </div>
-    ),
-    [mode]
-  );
-
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-gray-50 dark:bg-slate-950 font-sans transition-colors duration-200" dir="rtl">
-      <div className="bg-white dark:bg-slate-900 p-4 flex items-center justify-between shadow-sm sticky top-0 z-20 border-b dark:border-slate-800 flex-none">
-        <div className="flex items-center gap-3">
-          <button aria-label="بازگشت"
-            onClick={() => {
-              if (mode === 'detail' || mode === 'create') { setMode('list'); setSelected(null); return; }
-              onBack();
-            }}
-            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800"
-          >
-            <Icons.ArrowRight size={24} className="text-gray-700 dark:text-gray-200" />
-          </button>
-          <div className="flex flex-col">
-            <h2 className="text-lg font-bold text-gray-800 dark:text-white">{headerTitle}</h2>
-            {mode === 'detail' && selected && (
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[11px] text-gray-600 dark:text-gray-400 font-bold">#{toEnglishDigits(selected.id)}</span>
-                {ticketBadge(selected.status)}
-              </div>
-            )}
-          </div>
-        </div>
-        {topActions}
-      </div>
-
-      {message && (
-        <div className="px-4 pt-3">
-          <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-3 text-sm text-gray-700 dark:text-gray-200 flex items-start gap-2">
-            <Icons.Info size={18} className="text-blue-700 dark:text-blue-300 mt-0.5 shrink-0" />
-            <div className="leading-6">{message}</div>
-          </div>
-        </div>
-      )}
-
-      {mode === 'list' && (
-        <div className="flex-1 overflow-y-auto p-4 pb-24">
-          <div className="flex gap-2 mb-4">
-            <button
-              onClick={() => setTab('active')}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-bold border transition-colors ${tab === 'active' ? 'bg-vira-primary text-white border-vira-primary' : 'bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-200 border-gray-200 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-slate-800'}`}
-            >
-              تیکت‌های فعال
-            </button>
-            <button
-              onClick={() => setTab('closed')}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-bold border transition-colors ${tab === 'closed' ? 'bg-vira-primary text-white border-vira-primary' : 'bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-200 border-gray-200 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-slate-800'}`}
-            >
-              تیکت‌های بسته‌شده
-            </button>
-          </div>
-
+    <StudentPage
+      header={
+        <PageHeader
+          title={heading}
+          onBack={back}
+          backLabel={
+            mode === "list" ? "بازگشت به خانه" : "بازگشت به فهرست تیکت‌ها"
+          }
+          backDisabled={saving}
+          action={
+            mode !== "create" ? (
+              <Button onClick={create} disabled={saving}>
+                <Icons.Plus size={20} aria-hidden="true" />
+                تیکت جدید
+              </Button>
+            ) : onMessages ? (
+              <IconButton
+                className="student-header-action"
+                aria-label="باز کردن راهنمای خودکار"
+                onClick={onMessages}
+              >
+                <Icons.MessageSquare size={24} />
+              </IconButton>
+            ) : undefined
+          }
+        />
+      }
+    >
+      {notice && <StatusMessage>{notice}</StatusMessage>}
+      {mode === "list" && (
+        <>
+          <SegmentedTabs<"active" | "closed">
+            label="وضعیت تیکت‌ها"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: "active", label: "تیکت‌های فعال" },
+              { value: "closed", label: "تیکت‌های بسته‌شده" },
+            ]}
+          />
           {loading ? (
-            <div className="py-10 text-center text-gray-600 dark:text-gray-400">
-              <div className="inline-block w-8 h-8 border-4 border-vira-primary border-t-transparent rounded-full animate-spin mb-3" />
-              <div className="text-sm font-bold">در حال دریافت...</div>
-            </div>
+            <StatusMessage loading>در حال دریافت تیکت‌ها…</StatusMessage>
+          ) : listError ? (
+            <StatusMessage
+              error={listError}
+              onRetry={() => {
+                void loadTickets();
+              }}
+            />
           ) : tickets.length === 0 ? (
-            <div className="py-14 text-center bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800">
-              <div className="w-16 h-16 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-600 dark:text-gray-400">
-                <Icons.Headset size={28} />
-              </div>
-              <div className="text-sm font-bold text-gray-600 dark:text-gray-200">{listEmptyText}</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">برای شروع، یک تیکت جدید ثبت کنید.</div>
-            </div>
+            <EmptyState
+              illustration="support"
+              title={
+                tab === "active"
+                  ? "تیکت فعالی ندارید"
+                  : "تیکت بسته‌شده‌ای ندارید"
+              }
+              description="برای شروع، یک تیکت جدید ثبت کنید."
+              action={
+                <Button className="student-button-block" onClick={create}>
+                  ثبت تیکت جدید
+                </Button>
+              }
+            />
           ) : (
-            <div className="space-y-3">
-              {tickets.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => openTicket(t.id)}
-                  className="w-full text-right bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="font-black text-gray-800 dark:text-white text-sm">{t.title}</div>
-                      <div className="text-[11px] text-gray-600 dark:text-gray-400 mt-1">
-                        ثبت: {new Date(t.createdAt).toLocaleString('fa-IR')}
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      {ticketBadge(t.status)}
-                      <span className="text-[11px] text-gray-600 dark:text-gray-400 font-bold">#{toEnglishDigits(t.id)}</span>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {mode === 'create' && (
-        <div className="flex-1 overflow-y-auto p-4 pb-28">
-          <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-500">عنوان تیکت</label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={80}
-                className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 text-sm font-bold outline-none focus:border-vira-primary"
-                placeholder="مثال: مشکل در رزرو سرویس"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-500">توضیحات</label>
-              <textarea
-                value={desc}
-                onChange={(e) => setDesc(e.target.value)}
-                rows={5}
-                className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 text-sm outline-none focus:border-vira-primary leading-7"
-                placeholder="شرح کامل مشکل را بنویسید..."
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-gray-500">فایل‌های ضمیمه (اختیاری)</label>
-                <span className="text-[10px] text-gray-600 dark:text-gray-400">حداکثر ۵ فایل، هر فایل ۵MB</span>
-              </div>
-              <input
-                type="file"
-                multiple
-                accept=".png,.jpg,.jpeg,.webp,.pdf,.txt"
-                onChange={(e) => e.target.files && readFiles(e.target.files, setFiles)}
-                className="w-full text-xs"
-              />
-              {files.length > 0 && (
-                <div className="space-y-2">
-                  {files.map((f, idx) => (
-                    <div key={idx} className="flex items-center justify-between gap-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl px-4 py-3">
-                      <div className="text-xs font-bold text-gray-700 dark:text-gray-200 truncate">{f.name}</div>
-                      <button onClick={() => removeFile(idx, setFiles)} className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-500">
-                        <Icons.X size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <button
-              disabled={loading}
-              onClick={submitTicket}
-              className="w-full bg-vira-primary text-white py-3.5 rounded-2xl font-black shadow-lg shadow-vira-accent/40 active:scale-95 transition-transform disabled:opacity-60"
-            >
-              {loading ? 'در حال ثبت...' : 'ثبت تیکت'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {mode === 'detail' && selected && (
-        <div className="flex-1 overflow-y-auto p-4 pb-28">
-          <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-3 mb-4 pb-4 border-b border-dashed border-gray-200 dark:border-slate-800">
-              <div className="flex-1">
-                <div className="font-black text-gray-800 dark:text-white">{selected.title}</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">کاربر: {selected.user.name} ({toEnglishDigits(selected.user.studentId)})</div>
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                {ticketBadge(selected.status)}
+            <div className="student-support-list">
+              {tickets.map((ticket) => (
                 <button
                   type="button"
-                  onClick={() => handleDownload(supportTicketTxtUrl(selected.id), `ticket-${selected.id}.txt`)}
-                  className="text-xs font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-300 px-3 py-2 rounded-xl"
+                  className="student-card student-support-card"
+                  key={ticket.id}
+                  onClick={() => {
+                    setSelected(null);
+                    setNotice("");
+                    void openTicket(ticket.id);
+                  }}
                 >
-                  دانلود TXT
+                  <div className="student-support-card-heading">
+                    <h2>{ticket.title}</h2>
+                    {badge(ticket.status)}
+                  </div>
+                  <small>
+                    شماره <bdi>{ticket.id}</bdi> ·{" "}
+                    {new Date(ticket.createdAt).toLocaleString("fa-IR")}
+                  </small>
                 </button>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {selected.messages.map((m) => (
-                <div key={m.id} className={`flex ${m.senderRole === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[92%] rounded-2xl p-4 text-sm leading-7 border shadow-sm ${
-                    m.senderRole === 'user'
-                      ? 'bg-vira-primary text-white border-vira-primary/20 rounded-br-none'
-                      : 'bg-gray-50 dark:bg-slate-800 text-gray-800 dark:text-gray-100 border-gray-200 dark:border-slate-700 rounded-bl-none'
-                  }`}>
-                    <div className="text-[10px] opacity-80 font-bold mb-2 flex items-center justify-between gap-3">
-                      <span>{m.senderRole === 'user' ? 'شما' : 'پشتیبانی'}</span>
-                      <span>{new Date(m.createdAt).toLocaleString('fa-IR')}</span>
-                    </div>
-                    <div className="whitespace-pre-line">{m.message}</div>
-                    {m.attachments?.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-dashed border-white/30">
-                        <div className="text-[10px] font-black mb-2 opacity-90">ضمیمه‌ها</div>
-                        <div className="space-y-2">
-                          {m.attachments.map((a) => (
-                            <button
-                              type="button"
-                              key={a.id}
-                              onClick={() => handleDownload(supportAttachmentDownloadUrl(a.id), a.originalName || `attachment-${a.id}`)}
-                              className={`flex items-center justify-between gap-3 px-3 py-2 rounded-xl border ${
-                                m.senderRole === 'user'
-                                  ? 'bg-white/10 border-white/20'
-                                  : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-700'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Icons.Download size={16} className={m.senderRole === 'user' ? 'text-white' : 'text-gray-500'} />
-                                <span className={`text-xs font-bold truncate ${m.senderRole === 'user' ? 'text-white' : 'text-gray-700 dark:text-gray-200'}`}>
-                                  {a.originalName}
-                                </span>
-                              </div>
-                              <span className={`text-[10px] opacity-80 shrink-0 ${m.senderRole === 'user' ? 'text-white' : 'text-gray-600 dark:text-gray-400'}`}>
-                                {Math.round((a.sizeBytes || 0) / 1024)} KB
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
               ))}
-              <div ref={bottomRef} />
-            </div>
-          </div>
-
-          {canReply && (
-            <div className="fixed bottom-0 left-0 right-0 z-20 bg-white dark:bg-slate-900 border-t dark:border-slate-800 p-4">
-              <div className="max-w-2xl mx-auto space-y-2">
-                <div className="flex gap-2 items-end">
-                  <textarea
-                    value={reply}
-                    onChange={(e) => setReply(e.target.value)}
-                    rows={2}
-                    className="flex-1 bg-gray-100 dark:bg-slate-800 rounded-2xl px-4 py-3 text-sm outline-none text-gray-800 dark:text-white leading-7"
-                    placeholder="پاسخ خود را بنویسید..."
-                  />
-                  <button
-                    disabled={loading}
-                    onClick={submitReply}
-                    className="bg-vira-primary text-white px-4 py-3 rounded-2xl font-black shadow-sm active:scale-95 transition-transform disabled:opacity-60"
-                  >
-                    ارسال
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between gap-3">
-                  <label className="text-[11px] text-gray-500 font-bold flex items-center gap-2 cursor-pointer">
-                    <Icons.UploadCloud size={16} />
-                    افزودن ضمیمه
-                    <input
-                      type="file"
-                      multiple
-                      accept=".png,.jpg,.jpeg,.webp,.pdf,.txt"
-                      className="hidden"
-                      onChange={(e) => e.target.files && readFiles(e.target.files, setReplyFiles)}
-                    />
-                  </label>
-                  {replyFiles.length > 0 && (
-                    <span className="text-[11px] text-gray-600 dark:text-gray-400">{replyFiles.length} فایل انتخاب شد</span>
-                  )}
-                </div>
-
-                {replyFiles.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {replyFiles.map((f, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => removeFile(idx, setReplyFiles)}
-                        className="px-3 py-2 rounded-xl bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-xs font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2"
-                      >
-                        <Icons.X size={14} />
-                        <span className="max-w-[160px] truncate">{f.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           )}
-
-          {!canReply && (
-            <div className="fixed bottom-0 left-0 right-0 z-20 bg-white dark:bg-slate-900 border-t dark:border-slate-800 p-4">
-              <div className="max-w-2xl mx-auto text-center text-sm font-bold text-gray-500">
-                این تیکت بسته شده است.
-              </div>
-            </div>
-          )}
-        </div>
+        </>
       )}
-    </div>
+      {mode === "create" && (
+        <form
+          className="student-card student-form"
+          onSubmit={submitTicket}
+          noValidate
+        >
+          <Field
+            id="support-title"
+            label="عنوان تیکت"
+            error={touched && !title.trim() ? "عنوان تیکت الزامی است." : ""}
+          >
+            <input
+              id="support-title"
+              className="student-input"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              maxLength={80}
+              placeholder="مثال: مشکل در رزرو سرویس"
+              required
+              disabled={saving}
+              aria-invalid={touched && !title.trim()}
+              aria-describedby={
+                touched && !title.trim() ? "support-title-error" : undefined
+              }
+            />
+          </Field>
+          <Field
+            id="support-description"
+            label="توضیحات"
+            error={touched && !description.trim() ? "توضیحات الزامی است." : ""}
+          >
+            <textarea
+              id="support-description"
+              className="student-input"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              maxLength={4000}
+              rows={7}
+              placeholder="شرح کامل مشکل را بنویسید…"
+              required
+              disabled={saving}
+              aria-invalid={touched && !description.trim()}
+              aria-describedby={
+                touched && !description.trim()
+                  ? "support-description-error"
+                  : undefined
+              }
+            />
+          </Field>
+          <AttachmentPicker
+            id="support-files"
+            value={files}
+            onChange={setFiles}
+            onError={setFormError}
+            onReadingChange={setReadingFiles}
+            disabled={saving}
+          />
+          {formError && <StatusMessage error={formError} />}
+          <Button
+            type="submit"
+            className="student-button-block"
+            pending={saving}
+            disabled={saving || readingFiles}
+          >
+            {saving ? "در حال ثبت…" : "ثبت تیکت"}
+          </Button>
+        </form>
+      )}
+      {mode === "detail" && (
+        <>
+          {loading && (
+            <StatusMessage loading>در حال دریافت جزئیات…</StatusMessage>
+          )}
+          {detailError && (
+            <StatusMessage
+              error={detailError}
+              onRetry={() => {
+                void openTicket(lastTicketId.current);
+              }}
+            />
+          )}
+          {selected && (
+            <>
+              <section className="student-card">
+                <div className="student-conversation-meta">
+                  {badge(selected.status)}
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      void download(
+                        supportTicketTxtUrl(selected.id),
+                        "ticket-" + selected.id + ".txt",
+                      );
+                    }}
+                  >
+                    دانلود TXT
+                  </Button>
+                </div>
+                <h2 className="student-detail-title">{selected.title}</h2>
+                <p className="student-field-hint">
+                  کاربر: {selected.user.name} ·{" "}
+                  <bdi>{selected.user.studentId}</bdi>
+                </p>
+                <div className="student-conversation">
+                  {selected.messages.map((message) => (
+                    <article
+                      key={message.id}
+                      className={
+                        "student-message" +
+                        (message.senderRole === "user"
+                          ? " student-message-user"
+                          : "")
+                      }
+                    >
+                      <div className="student-message-meta">
+                        <strong>
+                          {message.senderRole === "user" ? "شما" : "پشتیبانی"}
+                        </strong>
+                        <span>
+                          {new Date(message.createdAt).toLocaleString("fa-IR")}
+                        </span>
+                      </div>
+                      <p>{message.message}</p>
+                      {message.attachments.map((attachment) => (
+                        <button
+                          type="button"
+                          className="student-message-download"
+                          key={attachment.id}
+                          onClick={() => {
+                            void download(
+                              supportAttachmentDownloadUrl(attachment.id),
+                              attachment.originalName,
+                            );
+                          }}
+                        >
+                          <Icons.Download size={20} aria-hidden="true" />
+                          <span>
+                            {attachment.originalName} ·{" "}
+                            {formatAmountFa(
+                              Math.round(attachment.sizeBytes / 1024),
+                            )}{" "}
+                            کیلوبایت
+                          </span>
+                        </button>
+                      ))}
+                    </article>
+                  ))}
+                  <div ref={bottom} />
+                </div>
+              </section>
+              {selected.status !== "closed" ? (
+                <form
+                  className="student-card student-form"
+                  onSubmit={submitReply}
+                  noValidate
+                >
+                  <Field id="support-reply" label="پاسخ شما">
+                    <textarea
+                      id="support-reply"
+                      className="student-input"
+                      value={reply}
+                      onChange={(event) => setReply(event.target.value)}
+                      rows={3}
+                      maxLength={4000}
+                      placeholder="پاسخ خود را بنویسید…"
+                      required
+                      disabled={saving}
+                    />
+                  </Field>
+                  <AttachmentPicker
+                    id="support-reply-files"
+                    value={replyFiles}
+                    onChange={setReplyFiles}
+                    onError={setFormError}
+                    onReadingChange={setReadingFiles}
+                    disabled={saving}
+                  />
+                  {formError && <StatusMessage error={formError} />}
+                  <Button
+                    type="submit"
+                    className="student-button-block"
+                    pending={saving}
+                    disabled={saving || readingFiles}
+                  >
+                    {saving ? "در حال ارسال…" : "ارسال پاسخ"}
+                  </Button>
+                </form>
+              ) : (
+                <>
+                  <StatusMessage>این تیکت بسته شده است.</StatusMessage>
+                  {formError && <StatusMessage error={formError} />}
+                </>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </StudentPage>
   );
 };
-
 export default SupportView;

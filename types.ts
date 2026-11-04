@@ -30,6 +30,11 @@ export enum AuthStage {
 
 export type Language = 'fa' | 'en' | 'ar';
 
+export interface ResourceState {
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  error: string;
+}
+
 export interface ToastState {
   message: string;
   type: 'success' | 'error' | 'info';

@@ -1,322 +1,375 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Icons } from '../components/Icons';
-import { UserIdea } from '../types';
-import { createIdea, deleteMyIdea, listMyIdeas, updateMyIdea } from '../services/apiService';
+import React, { useEffect, useRef, useState } from "react";
+import { Icons } from "../components/Icons";
+import { UserIdea } from "../types";
+import {
+  createIdea,
+  deleteMyIdea,
+  listMyIdeas,
+  updateMyIdea,
+} from "../services/apiService";
+import {
+  Button,
+  EmptyState,
+  Field,
+  IconButton,
+  PageHeader,
+  SegmentedTabs,
+  StatusMessage,
+  StudentPage,
+} from "../components/student/StudentUI";
+import { formatAmountFa } from "../utils/numberUtils";
 
-const statusLabelFa = (status: UserIdea['status']) => {
-  switch (status) {
-    case 'submitted': return 'ثبت شده';
-    case 'reviewing': return 'درحال بررسی';
-    case 'approved': return 'تایید شده';
-    case 'rejected': return 'رد شده';
-    case 'done': return 'انجام شد';
-    default: return status;
-  }
+const statusLabel: Record<UserIdea["status"], string> = {
+  submitted: "ثبت شده",
+  reviewing: "در حال بررسی",
+  approved: "تأیید شده",
+  rejected: "رد شده",
+  done: "انجام شد",
 };
-
-const statusBadgeClass = (status: UserIdea['status']) => {
-  switch (status) {
-    case 'submitted': return 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-900';
-    case 'reviewing': return 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-900';
-    case 'approved': return 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300 border-green-200 dark:border-green-900';
-    case 'rejected': return 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 border-red-200 dark:border-red-900';
-    case 'done': return 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-900';
-    default: return 'bg-gray-50 text-gray-700 dark:bg-slate-900 dark:text-gray-300 border-gray-200 dark:border-slate-700';
-  }
-};
-
 interface FeedbackViewProps {
   onBack: () => void;
-  showToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  showToast: (message: string, type: "success" | "error" | "info") => void;
 }
 
 const FeedbackView: React.FC<FeedbackViewProps> = ({ onBack, showToast }) => {
-  const [tab, setTab] = useState<'list' | 'new'>('list');
-  const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<"list" | "new">("list");
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const saveBusy = useRef(false);
+  const deleteBusy = useRef(false);
+  const requestId = useRef(0);
   const [ideas, setIdeas] = useState<UserIdea[]>([]);
-  const [error, setError] = useState<string>('');
-
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
-
+  const [listError, setListError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("");
   const [editing, setEditing] = useState<UserIdea | null>(null);
-
-  const canEdit = useMemo(() => (idea: UserIdea) => idea.status === 'submitted', []);
-
+  const [touched, setTouched] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 50;
+  const titleError =
+    title.trim().length < 5 ? "عنوان ایده باید حداقل ۵ کاراکتر باشد." : "";
+  const descriptionError =
+    description.trim().length < 15
+      ? "توضیحات ایده باید حداقل ۱۵ کاراکتر باشد."
+      : "";
   const resetForm = () => {
-    setTitle('');
-    setDescription('');
-    setCategory('');
+    setTitle("");
+    setDescription("");
+    setCategory("");
     setEditing(null);
+    setFormError("");
+    setTouched(false);
   };
-
-  const loadIdeas = async () => {
+  const loadIdeas = async (target = page) => {
+    const request = ++requestId.current;
     setLoading(true);
-    setError('');
+    setListError("");
     try {
-      const result = await listMyIdeas({ page: 1, pageSize: 50 });
+      const result = await listMyIdeas({ page: target, pageSize });
+      if (!Array.isArray(result.items) || !Number.isFinite(result.total))
+        throw new Error("پاسخ فهرست ایده‌ها معتبر نیست.");
+      if (request !== requestId.current) return;
       setIdeas(Array.isArray(result.items) ? result.items : []);
-    } catch (e: any) {
-      setError(e?.message || 'دریافت اطلاعات ناموفق بود');
+      setTotal(result.total);
+      const last = Math.max(1, Math.ceil(result.total / pageSize));
+      if (target > last) setPage(last);
+    } catch (error) {
+      if (request === requestId.current)
+        setListError((error as Error).message || "دریافت ایده‌ها ناموفق بود.");
     } finally {
-      setLoading(false);
+      if (request === requestId.current) setLoading(false);
     }
   };
-
   useEffect(() => {
-    loadIdeas();
-  }, []);
+    void loadIdeas(page);
+    return () => {
+      requestId.current += 1;
+    };
+  }, [page]);
 
-  const validateForm = () => {
-    if (!title.trim()) return 'عنوان ایده الزامی است.';
-    if (title.trim().length < 5) return 'عنوان ایده باید حداقل ۵ کاراکتر باشد.';
-    if (!description.trim()) return 'توضیحات ایده الزامی است.';
-    if (description.trim().length < 15) return 'توضیحات ایده باید حداقل ۱۵ کاراکتر باشد.';
-    return '';
-  };
-
-  const submit = async () => {
-    const validationError = validateForm();
-    if (validationError) {
-      showToast(validationError, 'error');
-      return;
-    }
-
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setTouched(true);
+    setFormError("");
+    if (titleError || descriptionError || saveBusy.current) return;
+    saveBusy.current = true;
     setSaving(true);
     try {
-      const payload = { title: title.trim(), description: description.trim(), category: category.trim() || undefined };
-      if (editing) {
-        await updateMyIdea(editing.id, payload);
-        showToast('ایده ویرایش شد', 'success');
-      } else {
-        await createIdea(payload);
-        showToast('ایده ثبت شد', 'success');
-      }
+      const payload = {
+        title: title.trim(),
+        description: description.trim(),
+        category: category.trim() || undefined,
+      };
+      if (editing) await updateMyIdea(editing.id, payload);
+      else await createIdea(payload);
+      showToast(editing ? "ایده ویرایش شد" : "ایده ثبت شد", "success");
       resetForm();
-      setTab('list');
-      await loadIdeas();
-    } catch (e: any) {
-      showToast(e?.message || 'عملیات ناموفق بود', 'error');
+      setTab("list");
+      if (page !== 1) setPage(1);
+      else await loadIdeas(1);
+    } catch (error) {
+      setFormError((error as Error).message || "ثبت ایده ناموفق بود.");
     } finally {
+      saveBusy.current = false;
       setSaving(false);
     }
   };
-
   const startEdit = (idea: UserIdea) => {
+    if (idea.status !== "submitted") return;
     setEditing(idea);
-    setTitle(idea.title || '');
-    setDescription(idea.description || '');
-    setCategory(idea.category || '');
-    setTab('new');
+    setTitle(idea.title);
+    setDescription(idea.description);
+    setCategory(idea.category || "");
+    setFormError("");
+    setTouched(false);
+    setTab("new");
   };
-
   const remove = async (idea: UserIdea) => {
-    if (!canEdit(idea)) {
-      showToast('این ایده قابل حذف نیست.', 'error');
+    if (
+      idea.status !== "submitted" ||
+      deleteBusy.current ||
+      !window.confirm("آیا از حذف این ایده مطمئن هستید؟")
+    )
       return;
-    }
-    if (!confirm('آیا از حذف این ایده مطمئن هستید؟')) return;
+    deleteBusy.current = true;
+    setDeleting(true);
     try {
       await deleteMyIdea(idea.id);
-      showToast('ایده حذف شد', 'success');
+      showToast("ایده حذف شد", "success");
       await loadIdeas();
-    } catch (e: any) {
-      showToast(e?.message || 'حذف ناموفق بود', 'error');
+    } catch (error) {
+      setListError((error as Error).message || "حذف ایده ناموفق بود.");
+    } finally {
+      deleteBusy.current = false;
+      setDeleting(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-gray-50 dark:bg-slate-950 font-sans transition-colors duration-200" dir="rtl">
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-900 p-4 flex items-center justify-between shadow-sm sticky top-0 z-10 border-b dark:border-slate-800 flex-none">
-        <div className="flex items-center gap-3">
-          <button aria-label="بازگشت به خانه" onClick={onBack} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
-            <Icons.ArrowRight size={24} className="text-gray-700 dark:text-gray-200" />
-          </button>
-          <h2 className="text-lg font-bold text-gray-800 dark:text-white">ثبت ایده و نظرات</h2>
-        </div>
-        <button
-          onClick={loadIdeas}
-          className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors ${loading ? 'animate-spin' : ''}`}
-          title="بروزرسانی"
-        >
-          <Icons.RefreshCw size={20} className="text-gray-700 dark:text-gray-200" />
-        </button>
-      </div>
-
-      <div className="flex-none px-4 pt-4">
-        <div className="flex bg-gray-100 dark:bg-slate-800 p-1 rounded-xl">
-          <button
-            onClick={() => setTab('list')}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tab === 'list' ? 'bg-white dark:bg-slate-700 text-gray-800 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400'}`}
-          >
-            ایده‌های من
-          </button>
-          <button
-            onClick={() => { resetForm(); setTab('new'); }}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tab === 'new' ? 'bg-white dark:bg-slate-700 text-gray-800 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400'}`}
-          >
-            {editing ? 'ویرایش' : 'ثبت جدید'}
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
-        {tab === 'new' ? (
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="font-black text-gray-800 dark:text-white">{editing ? 'ویرایش ایده' : 'ثبت ایده جدید'}</div>
-              {editing && (
-                <button onClick={() => { resetForm(); }} className="text-xs font-bold text-gray-500 hover:text-gray-700 dark:text-gray-400">
-                  انصراف
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-gray-600 dark:text-gray-300 mb-1">عنوان</label>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value.slice(0, 120))}
-                  className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-vira-primary"
-                  placeholder="مثلاً: پیشنهاد برای بهبود سرویس‌ها"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-600 dark:text-gray-300 mb-1">دسته‌بندی (اختیاری)</label>
-                <input
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value.slice(0, 60))}
-                  className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-vira-primary"
-                  placeholder="مثلاً: سرویس، کیف پول، اپلیکیشن"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-600 dark:text-gray-300 mb-1">توضیحات</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value.slice(0, 3000))}
-                  className="w-full min-h-[140px] bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-gray-800 dark:text-white outline-none focus:border-vira-primary"
-                  placeholder="مشکل یا پیشنهاد خود را کامل بنویسید..."
-                />
-                <div className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">{description.length.toLocaleString('fa-IR')} / ۳۰۰۰</div>
-              </div>
-
-              <button
-                onClick={submit}
-                disabled={saving}
-                className={`w-full py-3 rounded-xl font-black text-sm text-white active:scale-95 transition-all ${
-                  saving ? 'bg-gray-300 dark:bg-slate-700 cursor-not-allowed' : 'bg-vira-primary hover:bg-vira-secondary'
-                }`}
-              >
-                {saving ? 'در حال ارسال...' : (editing ? 'ذخیره تغییرات' : 'ثبت ایده')}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div>
-            {loading ? (
-              <div className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 p-6 flex items-center gap-3 text-gray-600 dark:text-gray-300">
-                <div className="w-5 h-5 border-2 border-vira-primary border-t-transparent rounded-full animate-spin"></div>
-                در حال دریافت...
-              </div>
-            ) : error ? (
-              <div className="bg-white dark:bg-slate-900 rounded-3xl border border-red-200 dark:border-red-900 p-6 text-red-600 dark:text-red-300">
-                {error}
-              </div>
-            ) : ideas.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 p-8 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 mx-auto flex items-center justify-center text-gray-500 dark:text-gray-300">
-                  <Icons.MessageSquare size={26} />
-                </div>
-                <div className="mt-4 font-black text-gray-800 dark:text-white">هنوز ایده‌ای ثبت نکرده‌اید</div>
-                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 leading-5">
-                  پیشنهادها و مشکلاتتان را ثبت کنید تا بررسی شود.
-                </div>
-                <button
-                  onClick={() => { resetForm(); setTab('new'); }}
-                  className="mt-5 inline-flex items-center gap-2 bg-vira-primary text-white px-4 py-2 rounded-xl font-bold text-sm active:scale-95 transition-all"
-                >
-                  <Icons.PlusSquare size={18} />
-                  ثبت ایده
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {ideas.map((idea) => (
-                  <div key={idea.id} className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-black text-gray-900 dark:text-white text-sm truncate">{idea.title}</div>
-                        <div className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">
-                          {new Date(idea.createdAt).toLocaleDateString('fa-IR')} · {new Date(idea.updatedAt).toLocaleDateString('fa-IR')}
-                        </div>
-                      </div>
-                      <span className={`shrink-0 text-[10px] font-black px-2 py-1 rounded-full border ${statusBadgeClass(idea.status)}`}>
-                        {statusLabelFa(idea.status)}
-                      </span>
-                    </div>
-
-                    <div className="mt-3 text-xs text-gray-600 dark:text-gray-300 leading-6 whitespace-pre-wrap">
-                      {idea.description}
-                    </div>
-
-                    {!!idea.adminResponse && (
-                      <div className="mt-4 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4">
-                        <div className="text-xs font-black text-gray-800 dark:text-white mb-1">پاسخ ادمین</div>
-                        <div className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap leading-6">{idea.adminResponse}</div>
-                      </div>
-                    )}
-
-                    <div className="mt-4 flex items-center justify-between">
-                      <div className="text-[11px] text-gray-600 dark:text-gray-400">
-                        {idea.category ? `دسته‌بندی: ${idea.category}` : 'بدون دسته‌بندی'}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => startEdit(idea)}
-                          disabled={!canEdit(idea)}
-                          className={`px-3 py-2 rounded-xl text-xs font-black border transition-colors ${
-                            canEdit(idea)
-                              ? 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-800'
-                              : 'bg-gray-100 dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 cursor-not-allowed'
-                          }`}
-                        >
-                          ویرایش
-                        </button>
-                        <button
-                          onClick={() => remove(idea)}
-                          disabled={!canEdit(idea)}
-                          className={`px-3 py-2 rounded-xl text-xs font-black border transition-colors ${
-                            canEdit(idea)
-                              ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 hover:bg-red-100'
-                              : 'bg-gray-100 dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 cursor-not-allowed'
-                          }`}
-                        >
-                          حذف
-                        </button>
-                      </div>
-                    </div>
-                    {!canEdit(idea) && (
-                      <div className="mt-3 text-[11px] text-gray-600 dark:text-gray-400">
-                        پس از شروع بررسی، امکان ویرایش/حذف وجود ندارد.
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+    <StudentPage
+      header={
+        <PageHeader
+          title="ثبت ایده و نظرات"
+          onBack={onBack}
+          action={
+            <IconButton
+              aria-label="تازه‌سازی ایده‌ها"
+              onClick={() => {
+                void loadIdeas();
+              }}
+              disabled={loading || saving}
+            >
+              <Icons.RefreshCw
+                size={25}
+                className={loading ? "animate-spin" : ""}
+              />
+            </IconButton>
+          }
+        />
+      }
+    >
+      <SegmentedTabs
+        value={tab}
+        disabled={saving}
+        onChange={(next) => {
+          if (!saving) setTab(next);
+        }}
+        label="ایده‌ها"
+        options={[
+          { value: "list", label: "ایده‌های من" },
+          { value: "new", label: editing ? "ویرایش" : "ثبت جدید" },
+        ]}
+      />
+      {tab === "new" ? (
+        <section className="student-card">
+          <div className="student-section-heading student-form-heading">
+            <h2>{editing ? "ویرایش ایده" : "ثبت ایده جدید"}</h2>
+            {editing && (
+              <Button variant="outline" disabled={saving} onClick={resetForm}>
+                انصراف از ویرایش
+              </Button>
             )}
           </div>
-        )}
-      </div>
-    </div>
+          <form className="student-form" onSubmit={submit} noValidate>
+            <Field
+              id="idea-title"
+              label="عنوان"
+              error={touched ? titleError : ""}
+            >
+              <input
+                id="idea-title"
+                className="student-input"
+                placeholder="مثلاً: پیشنهاد برای بهبود سرویس‌ها"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                maxLength={120}
+                required
+                disabled={saving}
+                aria-invalid={touched && Boolean(titleError)}
+                aria-describedby={
+                  touched && titleError ? "idea-title-error" : undefined
+                }
+              />
+            </Field>
+            <Field id="idea-category" label="دسته‌بندی (اختیاری)">
+              <input
+                id="idea-category"
+                className="student-input"
+                placeholder="مثلاً: سرویس، کیف پول، اپلیکیشن"
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                maxLength={60}
+                disabled={saving}
+              />
+            </Field>
+            <Field
+              id="idea-description"
+              label="توضیحات"
+              error={touched ? descriptionError : ""}
+            >
+              <textarea
+                id="idea-description"
+                className="student-input"
+                placeholder="مشکل یا پیشنهاد خود را کامل بنویسید…"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                maxLength={3000}
+                rows={6}
+                required
+                disabled={saving}
+                aria-invalid={touched && Boolean(descriptionError)}
+                aria-describedby={
+                  touched && descriptionError
+                    ? "idea-description-error idea-counter"
+                    : "idea-counter"
+                }
+              />
+            </Field>
+            <p className="student-counter" id="idea-counter">
+              {formatAmountFa(description.length)} از ۳۰۰۰
+            </p>
+            {formError && <StatusMessage error={formError} />}
+            <Button
+              type="submit"
+              className="student-button-block"
+              pending={saving}
+              disabled={saving}
+            >
+              {saving ? "در حال ثبت…" : editing ? "ذخیره تغییرات" : "ثبت ایده"}
+            </Button>
+          </form>
+        </section>
+      ) : loading ? (
+        <StatusMessage loading>در حال دریافت ایده‌ها…</StatusMessage>
+      ) : listError ? (
+        <StatusMessage
+          error={listError}
+          onRetry={() => {
+            void loadIdeas();
+          }}
+        />
+      ) : ideas.length === 0 ? (
+        <EmptyState
+          illustration="ideas"
+          title="هنوز ایده‌ای ثبت نکرده‌اید"
+          description="پیشنهادها و مشکلاتتان را ثبت کنید تا بررسی شود."
+          action={
+            <Button
+              onClick={() => {
+                resetForm();
+                setTab("new");
+              }}
+            >
+              <Icons.PlusSquare size={24} aria-hidden="true" />
+              ثبت ایده
+            </Button>
+          }
+        />
+      ) : (
+        <>
+          {ideas.map((idea) => (
+            <article key={idea.id} className="student-card student-idea-card">
+              <div className="student-idea-meta">
+                <span>
+                  {new Date(idea.createdAt).toLocaleDateString("fa-IR")}
+                </span>
+                <span className="student-badge" data-status={idea.status}>
+                  {statusLabel[idea.status]}
+                </span>
+              </div>
+              <h2>{idea.title}</h2>
+              <p>{idea.description}</p>
+              {idea.adminResponse && (
+                <section className="student-idea-response">
+                  <strong>پاسخ مدیریت</strong>
+                  <p>{idea.adminResponse}</p>
+                </section>
+              )}
+              <div className="student-idea-meta">
+                <span>
+                  {idea.category
+                    ? "دسته‌بندی: " + idea.category
+                    : "بدون دسته‌بندی"}
+                </span>
+                <span>
+                  به‌روزرسانی:{" "}
+                  {new Date(idea.updatedAt).toLocaleDateString("fa-IR")}
+                </span>
+              </div>
+              <div className="student-idea-actions">
+                <Button
+                  variant="outline"
+                  onClick={() => startEdit(idea)}
+                  disabled={idea.status !== "submitted" || deleting}
+                >
+                  ویرایش
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    void remove(idea);
+                  }}
+                  disabled={idea.status !== "submitted" || deleting}
+                >
+                  حذف
+                </Button>
+              </div>
+              {idea.status !== "submitted" && (
+                <p className="student-field-hint">
+                  پس از شروع بررسی، امکان ویرایش یا حذف وجود ندارد.
+                </p>
+              )}
+            </article>
+          ))}
+          {total > pageSize && (
+            <div className="student-pagination">
+              <Button
+                variant="outline"
+                disabled={page <= 1}
+                onClick={() => setPage((previous) => previous - 1)}
+              >
+                قبلی
+              </Button>
+              <span>
+                صفحه {formatAmountFa(page)} از{" "}
+                {formatAmountFa(Math.ceil(total / pageSize))}
+              </span>
+              <Button
+                variant="outline"
+                disabled={page * pageSize >= total}
+                onClick={() => setPage((previous) => previous + 1)}
+              >
+                بعدی
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+    </StudentPage>
   );
 };
-
 export default FeedbackView;
-

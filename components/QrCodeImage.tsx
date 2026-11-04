@@ -37,7 +37,7 @@ const QrCodeImage: React.FC<QrCodeImageProps> = ({ value, size = 180, className 
     return <div role="status" className={`flex items-center justify-center bg-white text-gray-600 text-center text-sm ${className}`} style={{ width: size, height: size }}>{failed ? 'ساخت QR ناموفق بود؛ از کد دستی استفاده کنید.' : 'در حال ساخت QR…'}</div>;
   }
 
-  return <img src={src} alt="کد QR بلیط برای اسکن راننده" style={{ imageRendering: 'pixelated' }} className={className} width={size} height={size} />;
+  return <img src={src} alt="کد QR بلیت برای اسکن راننده" style={{ imageRendering: 'pixelated' }} className={className} width={size} height={size} />;
 };
 
 export default QrCodeImage;

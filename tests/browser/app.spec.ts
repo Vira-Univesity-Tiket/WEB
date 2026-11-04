@@ -14,20 +14,20 @@ test('issue tickets, scan continuously without restarting the camera, reject inv
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await login(page);
-  await page.getByRole('button', { name: 'رزرو بلیط' }).click();
-  await page.getByRole('button', { name: 'مبدا حرکت', exact: true }).click();
+  await page.getByRole('button', { name: 'رزرو بلیت' }).click();
+  await page.getByRole('button', { name: 'مبدأ حرکت', exact: true }).click();
   await page.getByRole('option', { name: 'ایستگاه آزمایشی یک' }).click();
   await page.getByRole('button', { name: 'مقصد نهایی', exact: true }).click();
   await page.getByRole('option', { name: 'ایستگاه آزمایشی دو' }).click();
-  await page.getByRole('button', { name: 'انتخاب بلیط', exact: true }).click();
+  await page.getByRole('button', { name: 'انتخاب بلیت', exact: true }).click();
   let purchaseCount = 0;
   page.on('request', request => { if (request.url().endsWith('/tickets/reserve')) purchaseCount += 1; });
   const purchaseResponse = page.waitForResponse(response => response.url().endsWith('/tickets/reserve'));
-  await page.getByRole('button', { name: 'ثبت بلیط', exact: true }).click({ clickCount: 3 });
+  await page.getByRole('button', { name: 'ثبت بلیت', exact: true }).click({ clickCount: 3 });
   const purchase = await (await purchaseResponse).json();
-  await expect(page.getByText('بلیط رزرو شد', { exact: true })).toBeVisible();
+  await expect(page.getByText('بلیت رزرو شد', { exact: true })).toBeVisible();
   expect(purchaseCount).toBe(1);
-  const qr = page.getByAltText('کد QR بلیط برای اسکن راننده');
+  const qr = page.getByAltText('کد QR بلیت برای اسکن راننده');
   await expect(qr).toHaveAttribute('src', /^data:image\/png/);
   const image = await qr.getAttribute('src');
   await page.screenshot({ path: 'test-results/ticket-issued-mobile.png', fullPage: true });
@@ -115,8 +115,7 @@ test('issue tickets, scan continuously without restarting the camera, reject inv
   await driver.getByLabel('کد ۴ رقمی بلیط').fill(purchase.ticket.validationCode);
   await expect(driver.getByText('این بلیط قبلاً اسکن شده است.', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'بازگشت به خانه', exact: true }).last().click();
-  await page.getByRole('button', { name: 'بلیط‌ها', exact: true }).click();
+  await page.getByRole('button', { name: 'بازگشت', exact: true }).click();
   await page.getByRole('tab', { name: /آرشیو/ }).click();
   await page.getByRole('button', { name: 'ثبت نظر سفر', exact: true }).first().click();
   await page.getByRole('button', { name: '5 از ۵ ستاره' }).click();
@@ -142,12 +141,12 @@ test('touch forms keep readable input sizes and the initial viewport through foc
   expect(viewport).not.toMatch(/user-scalable\s*=\s*no|maximum-scale/i);
   await focusControl(page.getByLabel('شماره دانشجویی', { exact: true }));
   await focusControl(page.getByLabel('کد ملی', { exact: true }));
-  await page.getByRole('button', { name: 'ثبت نام', exact: true }).click();
+  await page.getByRole('tab', { name: 'ثبت‌نام', exact: true }).click();
   await focusControl(page.getByLabel('نام و نام خانوادگی', { exact: true }));
   await login(page);
   expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1);
-  await page.getByRole('button', { name: 'رزرو بلیط', exact: true }).click();
-  await page.getByRole('button', { name: 'مبدا حرکت', exact: true }).click();
+  await page.getByRole('button', { name: 'رزرو بلیت', exact: true }).click();
+  await page.getByRole('button', { name: 'مبدأ حرکت', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeFocused();
   await expect(page.getByRole('dialog').getByRole('textbox')).not.toBeFocused();
   await page.getByRole('dialog').getByRole('textbox').tap();
@@ -170,19 +169,19 @@ test('station search is optional on mobile and desktop, keyboard navigation and 
   await page.evaluate(() => { localStorage.setItem('vira_user_profile', '{broken'); sessionStorage.setItem('vira_admin_auth_meta', '{broken'); });
   await page.reload();
   await expect(page.getByRole('button', { name: 'ورود به حساب', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'ثبت نام', exact: true }).click();
+  await page.getByRole('tab', { name: 'ثبت‌نام', exact: true }).click();
   await expect(page.getByLabel('نام و نام خانوادگی')).toBeVisible();
   await page.getByRole('button', { name: 'شروع کنید' }).scrollIntoViewIfNeeded();
   await expect(page.getByRole('button', { name: 'شروع کنید' })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/auth-small-screen.png', fullPage: true });
   await login(page);
-  await page.getByRole('button', { name: 'رزرو بلیط' }).click();
-  const trigger = page.getByRole('button', { name: 'مبدا حرکت', exact: true });
+  await page.getByRole('button', { name: 'رزرو بلیت' }).click();
+  const trigger = page.getByRole('button', { name: 'مبدأ حرکت', exact: true });
   for (const width of [320, 1024]) {
     await page.setViewportSize({ width, height: 844 });
     await trigger.click();
-    const dialog = page.getByRole('dialog', { name: 'مبدا حرکت' });
+    const dialog = page.getByRole('dialog', { name: 'مبدأ حرکت' });
     const search = dialog.getByRole('textbox');
     await expect(dialog).toBeFocused();
     // Guard against the former delayed search autofocus as well as initial dialog focus.
@@ -192,7 +191,7 @@ test('station search is optional on mobile and desktop, keyboard navigation and 
     await page.keyboard.press('Shift+Tab');
     await expect(dialog.getByRole('option').last()).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(width <= 640 ? dialog.getByRole('button', { name: 'بستن فهرست ایستگاه‌ها' }) : search).toBeFocused();
+    await expect(dialog.getByRole('button', { name: 'بستن مبدأ حرکت' })).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(trigger).toBeFocused();
     await trigger.click();
@@ -324,11 +323,13 @@ test('customer screens have no serious WCAG issues or horizontal overflow', asyn
   await audit('authentication');
   await login(page);
   await audit('home');
-  for (const [name, title] of [['کیف پول', 'کیف پول'], ['پشتیبانی', 'پشتیبانی'], ['ثبت ایده و نظرات', 'ایده'], ['بلیط‌ها', 'بلیط های من'], ['سرویس دانشگاه', 'رزرو سرویس']] as const) {
-    await page.getByRole('button', { name, exact: true }).click();
+  for (const [name, title] of [['کیف پول', 'کیف پول'], ['پشتیبانی', 'پشتیبانی'], ['ثبت ایده و نظرات', 'ایده'], ['بلیت‌ها', 'بلیت‌های من'], ['سرویس دانشگاه', 'رزرو سرویس']] as const) {
+    await page.locator('.student-service-grid').getByRole('button', { name, exact: true }).click();
     await expect(page.getByText(title, { exact: false }).first()).toBeVisible();
     await audit(name);
     await page.reload();
+    await expect(page.getByRole('heading', { name: title, exact: false }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'بازگشت به خانه', exact: true }).click();
     await expect(page.getByRole('button', { name: 'حساب کاربری', exact: true })).toBeVisible();
   }
   await page.getByRole('button', { name: 'حساب کاربری', exact: true }).click();

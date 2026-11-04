@@ -20,6 +20,11 @@ export const toEnglishDigits = (str: string): string => {
     .replace(/[٠-٩]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 1584));
 };
 
+// Presentation only: preserve leading zeroes and the server's currency unit.
+export const formatPersianTextNumbers = (value: string): string => String(value)
+  .replace(/\d/g, digit => '۰۱۲۳۴۵۶۷۸۹'[Number(digit)])
+  .replace(/,/g, '٬');
+
 // Convert number to Persian words
 export const numberToPersianWords = (number: number | string): string => {
   const num = typeof number === 'string' ? removeCommas(number) : number;
