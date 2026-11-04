@@ -91,6 +91,7 @@ const BusBookingView: React.FC<BusBookingViewProps> = ({
 
   return (
     <StudentPage
+      className="student-booking"
       header={
         <PageHeader
           title="رزرو سرویس"

@@ -78,8 +78,8 @@ export default function DriverAuth({ logic }: { logic: DriverLogic }) {
           <header className="driver-login-brand">
             <img
               src="/illustrations/driver/login.png"
-              width="249"
-              height="244"
+              width="299"
+              height="293"
               alt=""
             />
             <strong>ویرا</strong>

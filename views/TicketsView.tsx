@@ -139,7 +139,7 @@ const TicketsView: React.FC<TicketsViewProps> = ({
             </div>
             <h2 className="student-ticket-route">
               {ticket.origin}
-              <span aria-hidden="true"> ← </span>
+              <span aria-hidden="true"> → </span>
               <br />
               {ticket.destination}
             </h2>

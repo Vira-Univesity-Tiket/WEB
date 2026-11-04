@@ -1,4 +1,5 @@
 import React from "react";
+import { History } from "lucide-react";
 import { Icons } from "../Icons";
 import type { DriverLogic } from "../../hooks/useDriverLogic";
 import { formatAmountFa, formatTomanFa } from "../../utils/numberUtils";
@@ -137,7 +138,7 @@ export default function DriverDashboard({ logic }: { logic: DriverLogic }) {
         aria-labelledby="driver-recent-title"
       >
         <DriverHeading
-          icon={<Icons.Clock size={25} />}
+          icon={<History size={25} />}
           action={
             <button
               type="button"

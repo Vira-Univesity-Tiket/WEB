@@ -304,7 +304,7 @@ textarea.student-input {
 .student-counter {
   color: var(--student-muted);
   font-size: 12px;
-  text-align: end;
+  text-align: start;
 }
 .student-tabs {
   display: flex;
@@ -805,6 +805,10 @@ textarea.student-input {
   color: white;
   padding: 22px 18px;
   isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
 }
 .student-hero-text {
   position: relative;
@@ -813,7 +817,7 @@ textarea.student-input {
   margin-inline-end: auto;
 }
 .student-hero h2 {
-  font-size: 23px;
+  font-size: clamp(19px, 4.9vw, 23px);
   font-weight: 850;
   line-height: 1.5;
 }
@@ -832,12 +836,18 @@ textarea.student-input {
   border: 0;
 }
 .student-hero-bus {
-  position: absolute;
-  width: 49%;
+  position: relative;
+  grid-area: 1 / 2;
+  align-self: end;
+  width: calc(100% + 18px);
   height: auto;
-  inset-inline-end: 1%;
-  bottom: 4px;
   z-index: 1;
+}
+.student-hero .student-hero-text {
+  grid-area: 1 / 1;
+  min-width: 0;
+  width: auto;
+  margin: 0;
 }
 .student-hero-route {
   position: absolute;
@@ -875,11 +885,11 @@ textarea.student-input {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-height: 84px;
   border: 1px solid var(--student-line);
   border-radius: 20px;
-  padding: 14px;
+  padding: 12px;
   background: var(--student-surface);
   color: var(--student-ink);
   text-align: start;
@@ -888,12 +898,12 @@ textarea.student-input {
   min-width: 0;
 }
 .student-service .student-icon-tile {
-  width: 48px;
-  height: 52px;
+  width: 44px;
+  height: 48px;
 }
 .student-service strong {
   font-weight: 800;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
@@ -929,6 +939,9 @@ textarea.student-input {
 }
 .student-route-card {
   padding: 20px;
+}
+.student-booking .student-route-decoration {
+  display: none;
 }
 .student-route-card .student-section-heading {
   margin-bottom: 18px;
@@ -1329,7 +1342,7 @@ textarea.student-input {
   margin-block: 16px !important;
 }
 .student-ticket-card {
-  border-inline-end: 5px solid var(--student-primary);
+  border-inline-start: 5px solid var(--student-primary);
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -1957,7 +1970,7 @@ textarea.student-input {
   .student-hero-bus {
     max-height: 210px;
     object-fit: contain;
-    width: 44%;
+    width: calc(100% + 24px);
   }
   .student-service {
     min-height: 104px;

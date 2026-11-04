@@ -97,6 +97,14 @@ for (const width of [360, 390, 430, 768, 1280]) {
         );
       }
     };
+    const captureExtra = async (name: string) => {
+      if (width !== 390) return;
+      await noOverflow(page);
+      await page.screenshot({
+        path: `${directory}/extra-${name}.png`,
+        fullPage: true,
+      });
+    };
     await page.goto("/driver");
     await expect(
       page.getByRole("button", { name: "ورود به پنل", exact: true }),
@@ -106,6 +114,12 @@ for (const width of [360, 390, 430, 768, 1280]) {
       .getByRole("button", { name: "ثبت‌نام راننده", exact: true })
       .click();
     await capture(2, "registration-personal-vehicle");
+    if (width === 390) {
+      await page
+        .getByRole("button", { name: "مرحله بعد", exact: true })
+        .scrollIntoViewIfNeeded();
+      await captureExtra("D02-plate-actions");
+    }
     await page.getByRole("button", { name: "مرحله بعد", exact: true }).click();
     await expect(
       page.getByText("نام و نام خانوادگی الزامی است.", { exact: true }),
@@ -129,6 +143,12 @@ for (const width of [360, 390, 430, 768, 1280]) {
     await page.getByLabel("کد منطقه پلاک", { exact: true }).fill("۶۷");
     await page.getByRole("button", { name: "مرحله بعد", exact: true }).click();
     await capture(3, "registration-documents");
+    if (width === 390) {
+      await page
+        .getByRole("button", { name: "مرحله بعد", exact: true })
+        .scrollIntoViewIfNeeded();
+      await captureExtra("D03-document-actions");
+    }
     for (const label of [
       "تصویر کارت ملی",
       "تصویر گواهینامه",
@@ -144,6 +164,12 @@ for (const width of [360, 390, 430, 768, 1280]) {
     ).toBeEnabled();
     await page.getByRole("button", { name: "مرحله بعد", exact: true }).click();
     await capture(4, "registration-account");
+    if (width === 390) {
+      await page
+        .getByRole("button", { name: "ثبت‌نام نهایی", exact: true })
+        .scrollIntoViewIfNeeded();
+      await captureExtra("D04-account-actions");
+    }
     await expect(
       page.getByRole("heading", { name: "ثبت‌نام راننده جدید", exact: true }),
     ).toBeVisible();
@@ -302,6 +328,10 @@ for (const width of [360, 390, 430, 768, 1280]) {
       page.getByText("درخواستی ثبت نشده است.", { exact: true }),
     ).toBeVisible();
     await capture(9, "route-request");
+    if (width === 390) {
+      await page.locator(".driver-route-list").scrollIntoViewIfNeeded();
+      await captureExtra("D09-empty-request-list");
+    }
     for (const [label, station] of [
       ["ایستگاه مبدأ", catalog.originName],
       ["ایستگاه مقصد", catalog.destinationName],

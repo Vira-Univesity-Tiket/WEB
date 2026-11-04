@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Check } from "lucide-react";
 import { Icons } from "../Icons";
 import type { DriverLogic } from "../../hooks/useDriverLogic";
 import {
@@ -68,7 +69,11 @@ const digits = (value: string, length: number) =>
   toEnglishDigits(value).replace(/\D/g, "").slice(0, length);
 export function DriverRegistrationStepper({ step }: { step: number }) {
   return (
-    <nav className="driver-registration-progress" aria-label="مراحل ثبت‌نام">
+    <nav
+      className="driver-registration-progress"
+      data-step={step}
+      aria-label="مراحل ثبت‌نام"
+    >
       <ol>
         {[1, 2, 3].map((number) => (
           <li
@@ -78,11 +83,7 @@ export function DriverRegistrationStepper({ step }: { step: number }) {
             data-complete={step > number}
           >
             <span>
-              {step > number ? (
-                <Icons.CheckCircle size={24} aria-hidden="true" />
-              ) : (
-                <i />
-              )}
+              {step > number ? <Check size={24} aria-hidden="true" /> : <i />}
             </span>
             <small>مرحله {formatAmountFa(number)}</small>
           </li>
@@ -291,9 +292,6 @@ export default function DriverRegistration({ logic }: { logic: DriverLogic }) {
           <h1>ثبت‌نام راننده جدید</h1>
         </header>
         <DriverRegistrationStepper step={regStep} />
-        <p className="driver-draft-note">
-          با بازخوانی این صفحه، فرم از ابتدا شروع می‌شود.
-        </p>
         <form
           className={
             "driver-card driver-registration-card driver-registration-step-" +
@@ -661,6 +659,9 @@ export default function DriverRegistration({ logic }: { logic: DriverLogic }) {
             </Button>
           </div>
         </form>
+        <p className="driver-draft-note">
+          با بازخوانی این صفحه، فرم از ابتدا شروع می‌شود.
+        </p>
         <DriverTrail />
       </div>
     </div>

@@ -1,6 +1,9 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import QRCode from 'qrcode';
+import { writeFile } from 'node:fs/promises';
+
+const displayedAmount = (value: string) => Number(value.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit))).replace(/[٠-٩]/g, digit => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit))).replace(/\D/g, ''));
 
 const login = async (page: Page) => {
   await page.goto('/');
@@ -14,6 +17,13 @@ test('issue tickets, scan continuously without restarting the camera, reject inv
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await login(page);
+  const studentHeaders = { Authorization: `Bearer ${await page.evaluate(() => localStorage.getItem('vira_user_auth_token'))}` };
+  const walletBalance = async () => {
+    const response = await page.request.get('/api1/auth/me', { headers: studentHeaders });
+    expect(response.ok()).toBeTruthy();
+    return displayedAmount((await response.json()).balance);
+  };
+  const balanceBefore = await walletBalance();
   await page.getByRole('button', { name: 'رزرو بلیت' }).click();
   await page.getByRole('button', { name: 'مبدأ حرکت', exact: true }).click();
   await page.getByRole('option', { name: 'ایستگاه آزمایشی یک' }).click();
@@ -34,6 +44,8 @@ test('issue tickets, scan continuously without restarting the camera, reject inv
   const nextPurchase = await page.request.post('/api1/tickets/reserve', { headers: { Authorization: `Bearer ${await page.evaluate(() => localStorage.getItem('vira_user_auth_token'))}`, 'Idempotency-Key': `browser-next-ticket-${Date.now()}` }, data: { schedule_id: 1, origin_station_id: 1, destination_station_id: 2, departure_time: '08:30', seatCount: 1 } });
   expect(nextPurchase.ok()).toBe(true);
   const nextTicket = (await nextPurchase.json()).ticket;
+  const balanceAfterPurchase = await walletBalance();
+  expect(balanceAfterPurchase).toBe(balanceBefore - displayedAmount(purchase.ticket.price) - displayedAmount(nextTicket.price));
   const nextImage = await QRCode.toDataURL(nextTicket.qrCode, { width: 440, margin: 4, errorCorrectionLevel: 'H' });
   const invalidImage = await QRCode.toDataURL('QR-NOT-ISSUED', { width: 440, margin: 4 });
 
@@ -112,11 +124,34 @@ test('issue tickets, scan continuously without restarting the camera, reject inv
   await expect.poll(() => driver.evaluate(() => (window as any).testTracks.every((track: MediaStreamTrack) => track.readyState === 'ended'))).toBe(true);
   await expect(driver.getByRole('dialog', { name: 'اسکن بلیت مسافر' })).not.toBeVisible();
   await expect(driver.getByText('مسافر سوار شده', { exact: true }).locator('..').getByText('۲', { exact: true })).toBeVisible();
+  const balanceAfterScans = await walletBalance();
+  expect(balanceAfterScans).toBe(balanceAfterPurchase);
+  const duplicate = driver.waitForResponse(response => response.url().endsWith('/driver/scan/code'));
   await driver.getByLabel('کد ۴ رقمی بلیت').fill(purchase.ticket.validationCode);
+  expect((await duplicate).status()).toBe(409);
   await expect(driver.getByText('این بلیت قبلاً اسکن شده است.', { exact: true })).toBeVisible();
+  const balanceAfterDuplicate = await walletBalance();
+  expect(balanceAfterDuplicate).toBe(balanceAfterPurchase);
+  const ticketsResponse = await page.request.get('/api1/tickets', { headers: studentHeaders });
+  expect(ticketsResponse.ok()).toBeTruthy();
+  const issuedTickets = await ticketsResponse.json() as { id: string; status: string; boardedAt: string | null }[];
+  for (const id of [purchase.ticket.id, nextTicket.id]) {
+    const ticket = issuedTickets.find(item => item.id === id);
+    expect(ticket?.status).toBe('expired'); expect(ticket?.boardedAt).toBeTruthy();
+  }
+  const scansResponse = await driver.request.get('/api1/driver/1/recent-scans', { headers: { Authorization: `Bearer ${await driver.evaluate(() => localStorage.getItem('vira_driver_auth_token'))}` } });
+  expect(scansResponse.ok()).toBeTruthy();
+  const scans = await scansResponse.json() as { ticketId: string }[];
+  expect(scans.map(item => item.ticketId).sort()).toEqual([purchase.ticket.id, nextTicket.id].sort());
+  await driver.screenshot({ path: 'test-results/shared-flow-driver-stats.png', fullPage: true });
+  await expect(driver.locator('.driver-recent-row')).toHaveCount(2);
+  await driver.locator('.driver-recent-scans').scrollIntoViewIfNeeded();
+  await driver.screenshot({ path: 'test-results/shared-flow-driver-history.png', fullPage: true });
+  await writeFile('test-results/shared-flow-result.json', JSON.stringify({ environment: 'isolated fixture; software camera with real jsQR and real API', ticketIds: [purchase.ticket.id, nextTicket.id], balanceBefore, balanceAfterPurchase, balanceAfterScans, balanceAfterDuplicate, recordedPassengers: scans.length, duplicateHttpStatus: 409, boardedAtVerified: true }, null, 2));
 
   await page.getByRole('button', { name: 'بازگشت', exact: true }).click();
   await page.getByRole('tab', { name: /آرشیو/ }).click();
+  await page.screenshot({ path: 'test-results/shared-flow-student-archive.png', fullPage: true });
   await page.getByRole('button', { name: 'ثبت نظر سفر', exact: true }).first().click();
   await page.getByRole('button', { name: '5 از ۵ ستاره' }).click();
   await page.getByLabel('نظر سفر', { exact: true }).fill('آزمون محلی جریان سفر');
@@ -160,6 +195,14 @@ test('touch forms keep readable input sizes and the initial viewport through foc
   const code = page.getByLabel('کد ۴ رقمی بلیت', { exact: true });
   await focusControl(code);
   expect(await code.evaluate(element => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThan(16);
+  await page.setViewportSize({ width: 360, height: 520 });
+  await code.scrollIntoViewIfNeeded();
+  await focusControl(code);
+  const codeBox = await code.boundingBox();
+  const navBox = await page.getByRole('navigation', { name: 'پیمایش راننده' }).boundingBox();
+  expect(codeBox!.y).toBeGreaterThanOrEqual(0);
+  expect(codeBox!.y + codeBox!.height).toBeLessThanOrEqual(navBox!.y);
+  await page.screenshot({ path: 'test-results/short-viewport-driver-code.png', fullPage: true });
   await context.close();
 });
 

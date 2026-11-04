@@ -1,4 +1,5 @@
 import React from "react";
+import { Coins } from "lucide-react";
 import { Icons } from "../Icons";
 import StationPicker from "../student/StationPicker";
 import type { DriverLogic } from "../../hooks/useDriverLogic";
@@ -126,7 +127,7 @@ export default function DriverRouteRequests({ logic }: { logic: DriverLogic }) {
             className="driver-route-price-field"
           >
             <span className="driver-field-icon" aria-hidden="true">
-              <Icons.Wallet size={24} />
+              <Coins size={24} />
             </span>
             <input
               id="driver-route-price"

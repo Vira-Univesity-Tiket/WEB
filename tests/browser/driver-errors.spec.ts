@@ -294,7 +294,22 @@ test("manual leading zeros remain strings and an uncertain server-side boarding 
   const invalid = page.waitForResponse((response) =>
     response.url().endsWith("/driver/scan/code"),
   );
-  await page.getByLabel("کد ۴ رقمی بلیت", { exact: true }).fill("٠٠٣٧");
+  await page
+    .getByLabel("کد ۴ رقمی بلیت", { exact: true })
+    .evaluate((element) => {
+      const input = element as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!.call(input, "٠٠٣٧");
+      input.dispatchEvent(
+        new InputEvent("input", {
+          bubbles: true,
+          inputType: "insertFromPaste",
+          data: "٠٠٣٧",
+        }),
+      );
+    });
   expect((await invalid).request().postDataJSON().code).toBe("0037");
   await expect(page.getByRole("alert")).toContainText("کد آزمایشی معتبر نیست");
   await page.unroute("**/api1/driver/scan/code");

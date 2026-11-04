@@ -25,57 +25,55 @@ export function DriverBrand({ compact = false }: { compact?: boolean }) {
     </div>
   );
 }
-export function DriverBanner() {
+export function DriverBanner({ shuttle = false }: { shuttle?: boolean }) {
   return (
     <header className="driver-banner">
       <DriverBrand />
       <img
         className="driver-banner-art"
-        src="/illustrations/driver/portal.png"
-        width="540"
-        height="208"
+        src={`/illustrations/driver/${shuttle ? "profile-shuttle" : "portal"}.png`}
+        width={shuttle ? 520 : 540}
+        height={shuttle ? 305 : 208}
         alt=""
       />
     </header>
   );
 }
 export function DriverTrail({ city = false }: { city?: boolean }) {
+  if (city)
+    return (
+      <img
+        className="driver-trail driver-trail-city"
+        src="/illustrations/driver/scan-route.png"
+        width="717"
+        height="430"
+        alt=""
+      />
+    );
   return (
     <svg
-      className={"driver-trail" + (city ? " driver-trail-city" : "")}
+      className="driver-trail"
       viewBox="0 0 800 180"
       fill="none"
       aria-hidden="true"
     >
-      {city && (
-        <g fill="#b2e7e4" opacity=".65">
-          <path d="M410 90V20h30v70m20 0V5h26v85m30 0V38h40v52m30 0V50h24v40m32 0V10h32v80" />
-          <path d="M390 80c-18-42 30-42 14 0m200-5c-24-54 38-54 20 0" />
-        </g>
-      )}
       <path
-        d={
-          city
-            ? "M160 175C-10 120 265 40 390 100s250 70 430-30"
-            : "M-15 96C120-35 235 188 420 117S660 46 820 110"
-        }
+        d="M-15 96C120-35 235 188 420 117S660 46 820 110"
         stroke="#8cddd5"
-        strokeWidth={city ? 30 : 3}
-        strokeDasharray={city ? undefined : "10 13"}
+        strokeWidth="3"
+        strokeDasharray="10 13"
         opacity=".65"
       />
       <g fill="#70d5ca">
         <path d="M667 35c-23 0-27 28 0 54 27-26 23-54 0-54Z" />
         <circle cx="667" cy="53" r="7" fill="#f5f8fc" />
       </g>
-      {!city && (
-        <g stroke="#70d5ca" strokeWidth="3" transform="translate(130 57)">
-          <rect width="29" height="32" rx="5" />
-          <path d="M3 8h23M4 25h21M14 8v11" />
-          <circle cx="6" cy="33" r="2" />
-          <circle cx="23" cy="33" r="2" />
-        </g>
-      )}
+      <g stroke="#70d5ca" strokeWidth="3" transform="translate(130 57)">
+        <rect width="29" height="32" rx="5" />
+        <path d="M3 8h23M4 25h21M14 8v11" />
+        <circle cx="6" cy="33" r="2" />
+        <circle cx="23" cy="33" r="2" />
+      </g>
     </svg>
   );
 }

@@ -44,7 +44,7 @@ export default function DriverAppView() {
         <>
           <div className="student-view driver-background">
             <main className="driver-content" ref={content}>
-              <DriverBanner />
+              <DriverBanner shuttle={page === "profile"} />
               <div className={"driver-page-content driver-page-" + page}>
                 {page === "dashboard" && <DriverDashboard logic={logic} />}
                 {page === "scan" && (

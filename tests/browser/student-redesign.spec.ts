@@ -88,6 +88,15 @@ for (const width of [360, 390, 430, 768, 1280]) {
         );
       }
     };
+    const captureExtra = async (name: string) => {
+      if (width !== 390) return;
+      await ready(page);
+      await noOverflow(page);
+      await page.screenshot({
+        path: `${directory}/extra-${name}.png`,
+        fullPage: true,
+      });
+    };
     let releaseConfig!: () => void;
     const configHeld = new Promise<void>((resolve) => {
       releaseConfig = resolve;
@@ -120,6 +129,12 @@ for (const width of [360, 390, 430, 768, 1280]) {
       page.getByRole("button", { name: "شروع کنید" }),
     ).toBeDisabled();
     await capture(3, "student-registration");
+    if (width === 390) {
+      await page
+        .getByRole("button", { name: "ورود به بخش رانندگان", exact: true })
+        .scrollIntoViewIfNeeded();
+      await captureExtra("U03-registration-actions");
+    }
     const studentId = `81000${String(width).padStart(4, "0")}`;
     const national = nationalCodeFor(`97000${String(width).padStart(4, "0")}`);
     await page
@@ -139,6 +154,24 @@ for (const width of [360, 390, 430, 768, 1280]) {
       page.getByText("دانشجوی آزمایش رابط", { exact: true }),
     ).toBeVisible();
     await capture(4, "home");
+    const bannerOverlap = await page
+      .locator(".student-hero")
+      .evaluate((banner) => {
+        const art = banner
+          .querySelector(".student-hero-bus")!
+          .getBoundingClientRect();
+        const copy = banner
+          .querySelector(".student-hero-text")!
+          .getBoundingClientRect();
+        return (
+          Math.min(art.right, copy.right) - Math.max(art.left, copy.left) > 1 &&
+          Math.min(art.bottom, copy.bottom) - Math.max(art.top, copy.top) > 1
+        );
+      });
+    expect(
+      bannerOverlap,
+      "booking banner illustration must leave the text and action readable",
+    ).toBe(false);
     const navigation = page.getByRole("navigation", { name: "پیمایش اصلی" });
     await expect(navigation.getByRole("button")).toHaveText([
       "خانه",
@@ -361,6 +394,10 @@ for (const width of [360, 390, 430, 768, 1280]) {
       page.getByRole("button", { name: "انتخاب بلیت", exact: true }),
     ).toHaveCount(3);
     await capture(15, "available-services");
+    if (width === 390) {
+      await page.locator(".student-bus-card").last().scrollIntoViewIfNeeded();
+      await captureExtra("U15-last-service");
+    }
     const lastService = page
       .getByRole("button", { name: "انتخاب بلیت", exact: true })
       .last();
@@ -423,6 +460,12 @@ for (const width of [360, 390, 430, 768, 1280]) {
     const qr = page.getByAltText("کد QR بلیت برای اسکن راننده");
     await expect(qr).toHaveAttribute("src", /^data:image\/png/);
     await capture(17, "reserved-ticket-qr");
+    if (width === 390) {
+      await page
+        .getByRole("button", { name: "بازگشت", exact: true })
+        .scrollIntoViewIfNeeded();
+      await captureExtra("U17-ticket-actions");
+    }
     if (width === 390) {
       const pixels = await qr.evaluate((element) => {
         const image = element as HTMLImageElement;
