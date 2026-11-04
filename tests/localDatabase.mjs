@@ -15,7 +15,7 @@ export async function createLocalDatabase() {
     DB_CONN_LIMIT: process.env.VIRA_TEST_POOL_SIZE || '4',
     JWT_SECRET: crypto.randomBytes(32).toString('hex'), SESSION_SECRET: crypto.randomBytes(32).toString('hex'),
     ADMIN_USERNAME: 'test-admin', ADMIN_PASSWORD: 'local-admin-test-password', SEED_DEMO_DATA: 'false',
-    CORS_ALLOWED_ORIGINS: 'http://127.0.0.1:3017', HEALTH_HTML_ENABLED: 'false',
+    CORS_ALLOWED_ORIGINS: 'http://127.0.0.1:3017,http://127.0.0.1:3018', HEALTH_HTML_ENABLED: 'false',
     TICKET_STORAGE_ROOT: await mkdtemp(path.join(os.tmpdir(), 'vira-tickets-'))
   });
   const root = await mysql.createConnection({ host: url.hostname, port: Number(process.env.DB_PORT), user: process.env.DB_USER, password: process.env.DB_PASSWORD });

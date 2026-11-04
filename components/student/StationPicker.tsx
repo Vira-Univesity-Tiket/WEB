@@ -11,6 +11,9 @@ interface StationPickerProps {
   excludedId?: string;
   onChange: (id: string) => void;
   onRetry: () => void;
+  label?: string;
+  placeholder?: string;
+  disabled?: boolean;
 }
 
 const normalize = (text: string) =>
@@ -29,11 +32,15 @@ export default function StationPicker({
   excludedId,
   onChange,
   onRetry,
+  label: labelOverride,
+  placeholder,
+  disabled = false,
 }: StationPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const id = useId();
-  const label = kind === "origin" ? "مبدأ حرکت" : "مقصد نهایی";
+  const label =
+    labelOverride || (kind === "origin" ? "مبدأ حرکت" : "مقصد نهایی");
   const active = useMemo(
     () => stations.filter((station) => station.isActive !== false),
     [stations],
@@ -65,6 +72,7 @@ export default function StationPicker({
         aria-label={label}
         aria-haspopup="dialog"
         aria-expanded={open}
+        disabled={disabled}
         onClick={() => setOpen(true)}
         className="student-station-button"
       >
@@ -72,6 +80,7 @@ export default function StationPicker({
           className={`student-station-name ${selected ? "" : "student-station-placeholder"}`}
         >
           {selected?.name ||
+            placeholder ||
             (kind === "origin" ? "انتخاب ایستگاه مبدأ" : "انتخاب ایستگاه مقصد")}
         </span>
         {selected && <small>انتخاب‌شده</small>}
@@ -117,7 +126,7 @@ export default function StationPicker({
                 key={station.id}
                 aria-selected={station.id === value}
                 aria-disabled={station.id === excludedId}
-                disabled={station.id === excludedId}
+                disabled={disabled || station.id === excludedId}
                 className="student-station-option"
                 onClick={() => {
                   onChange(station.id);
