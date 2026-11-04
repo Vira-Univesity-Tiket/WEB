@@ -199,7 +199,7 @@ export const handleCreateSupportTicket = async (req, res) => {
       [user.id, title]
     );
     const ticketId = ticketResult.insertId;
-    const storagePath = path.join(userSegment, `${ticketId}*${stamp.date}*${stamp.time}`);
+    const storagePath = path.join(userSegment, `${ticketId}_${stamp.date}_${stamp.time}`);
     const absDir = resolveTicketPath(storagePath);
     await ensureDir(absDir); // must exist even with no files
 

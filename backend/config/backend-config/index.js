@@ -67,6 +67,7 @@ const buildRuntimeFlags = (env) => {
 };
 
 const buildServerConfig = (env) => ({
+  host: String(env.BIND_HOST || '').trim() || undefined,
   port: toNumber(env.PORT, 5005),
   apiBasePath: normalizePath(env.API_BASE_PATH, '/api'),
   healthPath: normalizePath(env.HEALTH_PATH, '/healthz'),

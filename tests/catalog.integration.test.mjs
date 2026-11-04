@@ -164,8 +164,31 @@ test('deployment CLI saves usable credentials privately and never prints passwor
     const first = await run();
     credentialsFile = first.stdout.split('\n').find(line => line.startsWith('Private driver credentials: ')).slice('Private driver credentials: '.length);
     assert.equal(path.dirname(path.dirname(credentialsFile)), privateRoot);
-    assert.equal((await stat(credentialsFile)).mode & 0o777, 0o600);
-    assert.equal((await stat(path.dirname(credentialsFile))).mode & 0o777, 0o700);
+    if (process.platform === 'win32') {
+      const script = `
+        $ErrorActionPreference = 'Stop'
+        $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+        $parent = [System.IO.Path]::GetDirectoryName($env:VIRA_TEST_CREDENTIALS_FILE)
+        $file = [System.IO.File]::GetAccessControl($env:VIRA_TEST_CREDENTIALS_FILE)
+        $directory = [System.IO.Directory]::GetAccessControl($parent)
+        $root = [System.IO.Directory]::GetAccessControl([System.IO.Path]::GetDirectoryName($parent))
+        $rules = @($file.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+        $directoryRules = @($directory.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+        $unexpected = @(@($rules) + @($directoryRules) | Where-Object {
+          $_.IdentityReference -ne $sid -or $_.AccessControlType -ne 'Allow'
+        })
+        [ordered]@{ rootProtected = $root.AreAccessRulesProtected; fileRules = $rules.Count;
+          directoryRules = $directoryRules.Count; unexpectedRules = $unexpected.Count } | ConvertTo-Json -Compress
+      `;
+      const executable = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+      const { stdout } = await promisify(execFile)(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], {
+        env: { ...process.env, VIRA_TEST_CREDENTIALS_FILE: credentialsFile }, windowsHide: true, timeout: 10000
+      });
+      assert.deepEqual(JSON.parse(stdout), { rootProtected: true, fileRules: 1, directoryRules: 1, unexpectedRules: 0 });
+    } else {
+      assert.equal((await stat(credentialsFile)).mode & 0o777, 0o600);
+      assert.equal((await stat(path.dirname(credentialsFile))).mode & 0o777, 0o700);
+    }
     const { credentials } = JSON.parse(await readFile(credentialsFile, 'utf8'));
     assert.equal(credentials.length, 1);
     assert.equal(first.stdout.includes(credentials[0].password), false);

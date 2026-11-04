@@ -136,6 +136,8 @@ test('uploads reject forged MIME and support downloads retain object ownership',
   assert.equal(fake.status, 400);
   const valid = await request('/support/tickets', { token: fixture.tokens.user, body: { title: 'آزمایش ضمیمه', message: 'توضیح', attachments: [{ name: 'safe.txt', dataUrl: `data:text/plain;base64,${Buffer.from('local test').toString('base64')}` }] } });
   assert.equal(valid.status, 200, JSON.stringify(valid.data));
+  const [[storage]] = await fixture.db.query('SELECT storage_path FROM support_tickets WHERE id = ?', [valid.data.ticket.id]);
+  assert.doesNotMatch(storage.storage_path, /[<>:"|?*]/);
   const list = await request('/support/tickets', { token: fixture.tokens.user });
   const detail = await request(`/support/tickets/${list.data[0].id}`, { token: fixture.tokens.user });
   const attachmentId = detail.data.messages[0].attachments[0].id;

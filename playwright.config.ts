@@ -1,6 +1,11 @@
 import { defineConfig } from '@playwright/test';
+import { randomBytes } from 'node:crypto';
+
+process.env.VIRA_BROWSER_FIXTURE_KEY ||= randomBytes(32).toString('hex');
+
 export default defineConfig({
   testDir: './tests/browser',
+  globalTeardown: './tests/stop-fixture.mjs',
   workers: 1,
   timeout: 45_000,
   use: {

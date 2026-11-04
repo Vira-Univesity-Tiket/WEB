@@ -8,7 +8,7 @@ const bootstrap = async () => {
   logEnvironmentWarnings();
   await initDB();
   const { server: config } = loadBackendConfig();
-  const server = app.listen(config.port, () => console.info(`Vira backend listening on port ${config.port}`));
+  const server = app.listen(config.port, config.host, () => console.info(`Vira backend listening on port ${config.port}`));
   let shuttingDown = false;
   const shutdown = () => {
     if (shuttingDown) return;

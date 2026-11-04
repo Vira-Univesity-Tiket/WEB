@@ -1,10 +1,10 @@
-import { readFile, stat, mkdir, mkdtemp, open, unlink, rmdir } from 'node:fs/promises';
-import os from 'node:os';
+import { readFile, stat, unlink, rmdir } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import mysql from 'mysql2/promise';
 import { loadBackendEnv } from '../config/env.js';
 import { importNajafabadCatalog, validateNajafabadCatalog } from '../services/najafabadCatalogService.js';
+import { openPrivateCredentialsFile } from '../services/privateCredentialsFile.js';
 
 const help = `Najafabad university services (explicit import, no automatic seeding)
   npm run catalog:najafabad -- --file /private/catalog.json --validate
@@ -44,11 +44,7 @@ try {
       });
       let credentialsHandle;
       if (values.apply && catalog.drivers.length) {
-        const privateRoot = path.join(os.homedir(), '.vira-private');
-        await mkdir(privateRoot, { recursive: true, mode: 0o700 });
-        const privateDirectory = await mkdtemp(path.join(privateRoot, 'najafabad-'));
-        credentialsFile = path.join(privateDirectory, 'driver-credentials.json');
-        credentialsHandle = await open(credentialsFile, 'wx', 0o600);
+        ({ file: credentialsFile, handle: credentialsHandle } = await openPrivateCredentialsFile());
       }
       try {
         const result = await importNajafabadCatalog(pool, manifest, {
