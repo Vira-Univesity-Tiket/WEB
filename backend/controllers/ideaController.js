@@ -32,13 +32,13 @@ const mapIdea = (row) => ({
   updatedAt: row.updated_at
 });
 
-const mapAdminIdea = (row) => ({
+const mapAdminIdea = (row, role) => ({
   ...mapIdea(row),
   user: {
     id: String(row.user_id),
     name: row.user_name,
     studentId: row.user_student_id,
-    nationalCode: row.user_national_code
+    nationalCode: role === 'analyst' ? '' : row.user_national_code
   }
 });
 
@@ -247,7 +247,7 @@ export const handleAdminListIdeas = async (req, res) => {
        WHERE ${where.join(' AND ')}`,
       params
     );
-    res.json({ items: rows.map(mapAdminIdea), page, pageSize, total: Number(countRows?.[0]?.total || 0) });
+    res.json({ items: rows.map(row => mapAdminIdea(row, req.auth.role)), page, pageSize, total: Number(countRows?.[0]?.total || 0) });
   } catch (error) {
     logError('Admin List Ideas Error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -275,7 +275,7 @@ export const handleAdminGetIdeaDetail = async (req, res) => {
        ORDER BY created_at ASC`,
       [ideaId]
     );
-    res.json({ idea: mapAdminIdea(rows[0]), history });
+    res.json({ idea: mapAdminIdea(rows[0], req.auth.role), history });
   } catch (error) {
     logError('Admin Get Idea Error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -293,7 +293,7 @@ export const handleAdminUpdateIdea = async (req, res) => {
   if (!nextStatus) return res.status(400).json({ error: 'REQUIRED_STATUS' });
   if (!IDEA_STATUSES.includes(nextStatus)) return res.status(400).json({ error: 'INVALID_IDEA_STATUS' });
 
-  const adminResponse = sanitizePlainText(req.body.adminResponse, 5000);
+  const adminResponse = sanitizePlainText(req.body.adminResponse, 5000, { multiline: true });
   const adminNote = sanitizePlainText(req.body.adminNote, 255);
   const adminId = req.auth?.username || req.auth?.sub || 'admin';
 

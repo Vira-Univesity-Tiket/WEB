@@ -35,7 +35,7 @@ export const handleTicketFeedback = async (req, res) => {
     if (!rows.length) { await connection.rollback(); return res.status(404).json({ error: 'بلیط یافت نشد.' }); }
     if (!rows[0].boarded_at) { await connection.rollback(); return res.status(409).json({ error: 'ثبت نظر پس از تأیید بلیط توسط راننده امکان‌پذیر است.' }); }
     if (rows[0].feedback_rating) { await connection.rollback(); return res.status(409).json({ error: 'نظر این سفر قبلاً ثبت شده است.' }); }
-    const comment = sanitizeText(req.body.comment, 2000);
+    const comment = sanitizeText(req.body.comment, 2000, { multiline: true });
     await connection.query('INSERT INTO ticket_feedback (ticket_id, rating, comment) VALUES (?, ?, ?)', [id.value, rating.value, comment]);
     const ticket = mapTicketForUi({ ...rows[0], feedback_rating: rating.value, feedback_comment: comment, feedback_status: 'pending' });
     await connection.commit();
@@ -57,7 +57,7 @@ export const handleReviewTicketFeedback = async (req, res) => {
   const id = parsePositiveInt(req.params.ticketId);
   const { status, note = '' } = req.body;
   if (!id.ok || !statuses.includes(status) || typeof note !== 'string' || note.length > 2000) return res.status(400).json({ error: 'اطلاعات بررسی نظر معتبر نیست.' });
-  const [result] = await db.query('UPDATE ticket_feedback SET status = ?, review_note = ?, reviewed_by = ?, reviewed_at = NOW() WHERE ticket_id = ?', [status, sanitizeText(note, 2000), String(req.auth.username || req.auth.sub), id.value]);
+  const [result] = await db.query('UPDATE ticket_feedback SET status = ?, review_note = ?, reviewed_by = ?, reviewed_at = NOW() WHERE ticket_id = ?', [status, sanitizeText(note, 2000, { multiline: true }), String(req.auth.username || req.auth.sub), id.value]);
   if (!result.affectedRows) return res.status(404).json({ error: 'نظر سفر یافت نشد.' });
   await auditLog(db, req, 'admin.feedback_review', 'ticket', id.value, { status });
   res.json({ success: true });

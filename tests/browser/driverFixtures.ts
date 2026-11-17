@@ -3,7 +3,7 @@ import { seedStudentDesign } from "./studentFixtures";
 
 export const DRIVER_TEST_PASSWORD = "isolated-driver-ui-password";
 export const DOCUMENT_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nm0kAAAAASUVORK5CYII=",
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVQImWMQSrwvlHifAUIBACHSBUkvEEcpAAAAAElFTkSuQmCC",
   "base64",
 );
 export async function seedDriverDesign(request: APIRequestContext) {
@@ -131,3 +131,8 @@ export async function purchaseDriverTicket(
     id: string;
   };
 }
+
+export const DOCUMENT_PDF = Buffer.from(
+  "JVBERi0xLjcKJYGBgYEKCjUgMCBvYmoKPDwKL0ZpbHRlciAvRmxhdGVEZWNvZGUKL1R5cGUgL09ialN0bQovTiA0Ci9GaXJzdCAyMAovTGVuZ3RoIDMwMwo+PgpzdHJlYW0KeJzVUk1rhDAQvedXzLE9OYkx6iJC68elFJZlTy17kDUswrIpfkD77zuTaEsPpecqj5jMm5k35klAUKA1xJBmoMEkGopCRMePNwvRvrvYSURPQz/BK0URDnASUeWW2wxSlKX45lbd3F3dRYQkkEzeGPvR9cvZjlC0TdsipohoNMEgqprWipATFO0ppjL6JqR6BZ2lMWL8QLE2wKQhh+Oem6z5Da3ENcypA1dnYf/Vl3s1oYb6S09eiujZ9XU3W7irdwqVkVJyCj0v9/Q7RtvN7v8O5/UP7vb7hMdhvtptPp0HvV4D15KrziT04RkTs+pXIc5nG4dz05XndbVhJj9jvdZpmFP+dBgbi+01Wnaf91d0sJNbxjMZjngl35Tth+7RvZNfkV7q7XHi4Cc92KcrCmVuZHN0cmVhbQplbmRvYmoKCjYgMCBvYmoKPDwKL1NpemUgNwovUm9vdCAyIDAgUgovSW5mbyAzIDAgUgovRmlsdGVyIC9GbGF0ZURlY29kZQovVHlwZSAvWFJlZgovTGVuZ3RoIDM1Ci9XIFsgMSAyIDIgXQovSW5kZXggWyAwIDcgXQo+PgpzdHJlYW0KeJwVxDEOACAIBLAext3/774TQoeiu1y2bLWdeCSfAUQKAtkKZW5kc3RyZWFtCmVuZG9iagoKc3RhcnR4cmVmCjQyMQolJUVPRg==",
+  "base64",
+);

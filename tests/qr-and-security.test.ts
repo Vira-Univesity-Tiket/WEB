@@ -63,11 +63,11 @@ test('session signatures and expiry are validated and URL/body tokens are reject
   assert.equal(status, 401);
 });
 
-test('uploads validate signatures, canonical base64 and bounded numeric input', () => {
+test('uploads validate signatures, canonical base64 and bounded numeric input', async () => {
   const options = { maxBytes: 1024, allowedMime: ['image/png', 'text/plain'] };
-  assert.equal(parseUpload(`data:image/png;base64,${Buffer.from('not a png').toString('base64')}`, options).ok, false);
-  assert.equal(parseUpload('data:text/plain;base64,SGVsbG8=', options).ok, true);
-  assert.equal(parseUpload('data:text/plain;base64,SGVsbG8=!!!', options).ok, false);
+  assert.equal((await parseUpload(`data:image/png;base64,${Buffer.from('not a png').toString('base64')}`, options)).ok, false);
+  assert.equal((await parseUpload('data:text/plain;base64,SGVsbG8=', options)).ok, true);
+  assert.equal((await parseUpload('data:text/plain;base64,SGVsbG8=!!!', options)).ok, false);
   assert.equal(parsePositiveInt('9'.repeat(100_000)).ok, false);
 });
 

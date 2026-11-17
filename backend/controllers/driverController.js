@@ -45,7 +45,7 @@ export const handleDriverRegister = async (req, res) => {
     return res.status(400).json({ error: 'بارگذاری کامل مدارک الزامی است.' });
   }
   for (const key of ['nationalCard', 'licenseCard', 'carCard']) {
-    const file = parseUpload(documents[key], { maxBytes: 3 * 1024 * 1024, allowedMime: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'] });
+    const file = await parseUpload(documents[key], { maxBytes: 3 * 1024 * 1024, allowedMime: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'] });
     if (!file.ok) return res.status(400).json({ error: file.error });
   }
 
@@ -79,7 +79,7 @@ export const handleDriverRegister = async (req, res) => {
 
         // If 'pending' or 'rejected', update the record and reset status to 'pending' for review.
         await db.query(
-            `UPDATE drivers SET name=?, national_code=?, birth_date=?, phone=?, license_plate=?, plate_data=?, documents=?, password=?, status='pending', rejection_reason=NULL, created_at=CURRENT_TIMESTAMP 
+            `UPDATE drivers SET name=?, national_code=?, birth_date=?, phone=?, license_plate=?, plate_data=?, documents=?, password=?, auth_version=auth_version+1, status='pending', rejection_reason=NULL, created_at=CURRENT_TIMESTAMP
              WHERE id=?`,
             [name, nationalCode, sanitizeText(birthDate, 20), normalizedPhone, licensePlate, JSON.stringify(plateData), JSON.stringify(documents), hashedPassword, driver.id]
         );
@@ -157,7 +157,8 @@ export const handleDriverLogin = async (req, res) => {
       sub: driver.id.toString(),
       role: 'driver',
       driverId: driver.id.toString(),
-      username: driver.username
+      username: driver.username,
+      authVersion: driver.auth_version
     });
 
     await auditLog(db, req, 'driver.login', 'driver', driver.id);

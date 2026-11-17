@@ -22,6 +22,63 @@ const request = async (path, { token, body, method = body === undefined ? 'GET' 
 };
 const purchase = (token, seats = 1, schedule = 1, key = randomUUID()) => request('/tickets/reserve', { token, key, body: { schedule_id: schedule, origin_station_id: schedule === 1 ? 1 : 2, destination_station_id: schedule === 1 ? 2 : 3, departure_time: schedule === 1 ? '08:30' : '11:00', seatCount: seats } });
 
+test('BRM: analysts cannot recover student credentials from user, idea or driver identity responses', async () => {
+  const admin = fixture.tokens.admin, analyst = fixture.tokens.analyst;
+  const users = await request('/admin/users', { token: analyst });
+  assert.equal(users.status, 200);
+  assert.equal(users.data.length, 3);
+  assert.ok(users.data.every(user => user.nationalCode === '' && user.studentId === '' && user.avatar === ''));
+  const full = await request('/admin/users', { token: admin });
+  assert.equal(full.data.find(user => user.id === 1).nationalCode, '1234567891');
+  assert.equal((await request('/auth/login', { body: { studentId: '', nationalCode: '' } })).status, 400);
+  const idea = await request('/ideas', { token: fixture.tokens.user, body: { title: 'آزمایش مرز اطلاعات', description: 'توضیح آزمایشی برای بررسی حفاظت از کد ملی دانشجو.' } });
+  assert.equal(idea.status, 201, JSON.stringify(idea.data));
+  const list = await request('/admin/ideas', { token: analyst });
+  assert.ok(list.data.items.every(item => item.user.nationalCode === ''));
+  const detail = await request(`/admin/ideas/${idea.data.id}`, { token: analyst });
+  assert.equal(detail.data.idea.user.nationalCode, '');
+  await fixture.db.query('UPDATE drivers SET national_code = ?, documents = ? WHERE id = 1', ['1234567891', JSON.stringify({ nationalCard: 'private-fixture-document' })]);
+  for (const route of ['/admin/drivers', '/admin/driver-requests/history']) {
+    const response = await request(route, { token: analyst });
+    assert.equal(response.status, 200);
+    assert.ok(response.data.every(driver => !driver.nationalCode && !driver.documents));
+  }
+  const exported = await request('/admin/drivers/1/export', { token: analyst });
+  assert.equal(exported.status, 200);
+  assert.equal(exported.data[0].nationalCode, '');
+});
+
+test('BRM: legacy support uses atomic canonical persistence and preserves multiline text', async () => {
+  const message = 'سطر اول\r\nسطر دوم\tتوضیح';
+  const saved = await request('/support/ticket', { token: fixture.tokens.user, body: { title: 'پشتیبانی سازگار', message } });
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  assert.equal(saved.data.ticketId, `TKT-${saved.data.ticket.id}`);
+  const detail = await request(`/support/tickets/${saved.data.ticket.id}`, { token: fixture.tokens.user });
+  assert.equal(detail.data.messages[0].message, 'سطر اول\nسطر دوم توضیح');
+  assert.equal((await request('/support/ticket', { token: fixture.tokens.driver, body: { title: 'نباید ثبت شود', message } })).status, 403);
+  const [[beforeCount]] = await fixture.db.query('SELECT COUNT(*) AS count FROM support_tickets');
+  await fixture.db.query("CREATE TRIGGER brm_fail_message BEFORE INSERT ON support_ticket_messages FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'isolated regression failure'");
+  try {
+    const failed = await request('/support/ticket', { token: fixture.tokens.user, body: { title: 'خطای ذخیره', message } });
+    assert.equal(failed.status, 500);
+    assert.equal(failed.data.success, undefined);
+    assert.equal(failed.data.ticketId, undefined);
+    const [[afterCount]] = await fixture.db.query('SELECT COUNT(*) AS count FROM support_tickets');
+    assert.equal(afterCount.count, beforeCount.count);
+  } finally { await fixture.db.query('DROP TRIGGER brm_fail_message'); }
+});
+
+test('BRM: missing account mutations are 404, existing unchanged updates remain successful', async () => {
+  for (const [suffix, body] of [['', { username: 'missing', role: 'analyst' }], ['/status', {}], ['/reset-password', { password: 'new-test-password' }]]) {
+    const result = await request(`/admin/analysts/987654${suffix}`, { token: fixture.tokens.admin, method: 'PUT', body });
+    assert.equal(result.status, 404, JSON.stringify(result.data));
+  }
+  const unchanged = await request('/admin/analysts/99', { token: fixture.tokens.admin, method: 'PUT', body: { username: 'test-analyst', role: 'analyst' } });
+  assert.equal(unchanged.status, 200);
+  const [[audit]] = await fixture.db.query("SELECT COUNT(*) AS count FROM audit_logs WHERE entity_type = 'admin_account' AND entity_id = '987654'");
+  assert.equal(audit.count, 0);
+});
+
 test('API contracts, authentication, role boundaries and health', async () => {
   assert.equal((await request('/tickets')).status, 401);
   let nested = {}; for (let index = 0; index < 40; index++) nested = { nested };
@@ -173,7 +230,7 @@ test('pending driver registration cannot be replaced without the previous passwo
   const { hashPassword } = await import('../backend/security.js');
   const password = await hashPassword('previous-password');
   await fixture.db.query("INSERT INTO drivers (name, username, password, license_plate, national_code, status) VALUES ('راننده در انتظار', 'pending-test', ?, 'PENDING-1', '1234567891', 'pending')", [password]);
-  const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j5xkAAAAASUVORK5CYII=';
+  const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVQImWMQSrwvlHifAUIBACHSBUkvEEcpAAAAAElFTkSuQmCC';
   const result = await request('/driver/register', { body: { name: 'تلاش جایگزینی', username: 'pending-test', password: 'different-password', nationalCode: '1234567891', birthDate: '1380/01/01', plateData: { part1: '11', letter: 'ب', part2: '111', part3: '11' }, documents: { nationalCard: image, licenseCard: image, carCard: image } } });
   assert.equal(result.status, 409);
   const [[row]] = await fixture.db.query("SELECT password FROM drivers WHERE username = 'pending-test'");
@@ -221,6 +278,9 @@ test('an unavailable database prevents the production server from accepting traf
 test('local gateway simulation binds callback authority and supports repeat topups with the same card', async () => {
   const pending = new Map();
   let next = 0;
+  let verificationMode = 'success';
+  let verificationHold;
+  let verificationStarted;
   const gateway = http.createServer(async (req, res) => {
     let text = ''; for await (const chunk of req) text += chunk;
     const input = JSON.parse(text);
@@ -230,6 +290,11 @@ test('local gateway simulation binds callback authority and supports repeat topu
       pending.set(authority, { amount: input.amount, reference: String(++next), verified: false });
       res.end(JSON.stringify({ data: { code: 100, authority } }));
     } else {
+      if (verificationMode === 'unavailable') { res.writeHead(503).end(JSON.stringify({ errors: { code: -51, message: 'temporary outage' } })); return; }
+      if (verificationMode === 'definitive-failure') { res.writeHead(401).end(JSON.stringify({ errors: { code: -51, message: 'Unsuccessful payment' } })); return; }
+      if (verificationMode === 'malformed') { res.end(JSON.stringify({ data: { code: 100 } })); return; }
+      if (verificationMode === 'disconnected') { req.socket.destroy(); return; }
+      if (verificationHold) { verificationStarted(); await verificationHold; }
       const payment = pending.get(input.authority);
       assert.equal(input.amount, payment.amount);
       const code = payment.verified ? 101 : 100;
@@ -260,6 +325,54 @@ test('local gateway simulation binds callback authority and supports repeat topu
     }
     const [[afterBalance]] = await fixture.db.query('SELECT balance FROM users WHERE id = 1');
     assert.equal(afterBalance.balance, beforeBalance.balance + 200000);
+    const unresolved = await request('/wallet/topup/initiate', { token: fixture.tokens.user, body: { amount: 10000 } });
+    assert.equal(unresolved.status, 200);
+    const [[unresolvedPayment]] = await fixture.db.query('SELECT authority FROM payment_transactions WHERE id = ?', [unresolved.data.transactionId]);
+    const retryPath = `/wallet/topup/status/${unresolved.data.transactionId}`;
+    assert.equal((await request(retryPath, { token: fixture.tokens.other })).status, 404);
+    for (const mode of ['unavailable', 'malformed', 'disconnected']) {
+      verificationMode = mode;
+      const waiting = await request('/wallet/topup/callback', { body: { transactionId: unresolved.data.transactionId, Authority: unresolvedPayment.authority, Status: 'NOK' } });
+      assert.equal(waiting.status, 200);
+      assert.equal(waiting.data.status, 'pending');
+      assert.equal((await request(retryPath, { token: fixture.tokens.user })).data.status, 'pending');
+    }
+    const [[uncredited]] = await fixture.db.query('SELECT balance FROM users WHERE id = 1');
+    assert.equal(uncredited.balance, afterBalance.balance);
+    verificationMode = 'success';
+    let releaseVerification;
+    const started = new Promise(resolve => { verificationStarted = resolve; });
+    verificationHold = new Promise(resolve => { releaseVerification = resolve; });
+    const ownerReconciliation = request(retryPath, { token: fixture.tokens.user });
+    await Promise.race([started, ownerReconciliation.then(() => { throw new Error('Owner status must verify a pending payment'); })]);
+    const callbackReconciliation = request('/wallet/topup/callback', { body: { transactionId: unresolved.data.transactionId, Authority: unresolvedPayment.authority, Status: 'OK' } });
+    releaseVerification();
+    const reconciled = await Promise.all([
+      ownerReconciliation, callbackReconciliation,
+    ]);
+    verificationHold = undefined;
+    assert.ok(reconciled.every(response => response.status === 200 && response.data.status === 'success'));
+    assert.ok(reconciled[0].data.verifiedAt);
+    assert.ok(reconciled[0].data.updatedAt);
+    const recoveredStatus = await request(retryPath, { token: fixture.tokens.user });
+    assert.equal(recoveredStatus.data.status, 'success');
+    assert.ok(recoveredStatus.data.verifiedAt);
+    assert.ok(recoveredStatus.data.updatedAt);
+    assert.ok(recoveredStatus.data.createdAt);
+    const cancelled = await request('/wallet/topup/initiate', { token: fixture.tokens.user, body: { amount: 10000 } });
+    assert.equal(cancelled.status, 200);
+    const [[cancelledPayment]] = await fixture.db.query('SELECT authority FROM payment_transactions WHERE id = ?', [cancelled.data.transactionId]);
+    const cancelledCallback = { transactionId: cancelled.data.transactionId, Authority: cancelledPayment.authority, Status: 'NOK' };
+    verificationMode = 'definitive-failure';
+    const nonpayment = await request('/wallet/topup/callback', { body: cancelledCallback });
+    assert.equal(nonpayment.status, 400);
+    assert.equal(nonpayment.data.status, 'cancelled');
+    assert.equal((await request(`/wallet/topup/status/${cancelled.data.transactionId}`, { token: fixture.tokens.user })).data.status, 'cancelled');
+    // A delayed positive verification still reconciles, exactly once, rather
+    // than trusting a callback flag or permanently short-circuiting old failure.
+    verificationMode = 'success';
+    assert.equal((await request('/wallet/topup/callback', { body: cancelledCallback })).data.status, 'success');
+    assert.equal((await request('/wallet/topup/callback', { body: cancelledCallback })).data.idempotent, true);
     const created = await request('/wallet/topup/initiate', { token: fixture.tokens.user, body: { amount: 10000 } });
     assert.equal(created.status, 200);
     const [[payment]] = await fixture.db.query('SELECT authority FROM payment_transactions WHERE id = ?', [created.data.transactionId]);
@@ -268,7 +381,7 @@ test('local gateway simulation binds callback authority and supports repeat topu
     const credited = await request('/wallet/topup/callback', { body: { transactionId: created.data.transactionId, Authority: payment.authority, Status: 'OK' } });
     assert.equal(credited.status, 200, JSON.stringify(credited.data));
     const [[paidBalance]] = await fixture.db.query('SELECT balance FROM users WHERE id = 1');
-    assert.equal(paidBalance.balance, beforeBalance.balance + 300000);
+    assert.equal(paidBalance.balance, beforeBalance.balance + 500000);
     await fixture.db.query("UPDATE users SET status = 'active' WHERE id = 1");
 
   } finally {

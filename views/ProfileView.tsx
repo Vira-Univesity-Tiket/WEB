@@ -30,10 +30,8 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
   const [avatar, setAvatar] = useState(userProfile.avatar || '');
   const [language, setLanguage] = useState<Language>(userProfile.language || 'fa');
 
-  // Helper to get text based on selected language
-  // NOTE: In ProfileView we use the *local state* language for the UI immediately
-  // to show the user what they are selecting.
-  const t = translations[language];
+  // The stored preference remains editable; Persian is the complete UI locale.
+  const t = translations.fa;
 
   // Limit to first few provinces for smoother rendering if list is huge, or show all
   const displayedProvinces = provinces;
@@ -130,7 +128,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 p-4 flex items-center gap-3 shadow-sm sticky top-0 z-10 border-b dark:border-slate-800">
         <button aria-label="بازگشت به خانه" onClick={onBack} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
-           {language === 'en' ? <Icons.ArrowRight className="rotate-180 text-gray-700 dark:text-gray-200" size={24} /> : <Icons.ArrowRight size={24} className="text-gray-700 dark:text-gray-200" />}
+           <Icons.ArrowRight size={24} className="text-gray-700 dark:text-gray-200" />
         </button>
         <h2 className="text-lg font-bold text-gray-800 dark:text-white">{t.profile_header}</h2>
       </div>
@@ -178,7 +176,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
                 aria-label="حالت تاریک" role="switch" aria-checked={isDarkMode} onClick={onToggleTheme}
                 className={`w-12 h-7 rounded-full p-1 flex items-center transition-colors duration-300 relative ${isDarkMode ? 'bg-indigo-500' : 'bg-gray-300'}`}
             >
-                <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 ${isDarkMode ? (language === 'en' ? 'translate-x-5' : '-translate-x-5') : 'translate-x-0'}`}></div>
+                <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 ${isDarkMode ? '-translate-x-5' : 'translate-x-0'}`}></div>
             </button>
         </div>
 
@@ -262,9 +260,10 @@ const ProfileView: React.FC<ProfileViewProps> = ({ userProfile, onBack, onSave, 
                 className="w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-3.5 rounded-xl text-sm font-bold text-gray-700 dark:text-white outline-none focus:border-vira-primary appearance-none transition-colors"
             >
                 <option value="fa">فارسی</option>
-                <option value="en">English</option>
-                <option value="ar">العربية</option>
+                <option value="en" disabled>English — ترجمه کامل در دسترس نیست</option>
+                <option value="ar" disabled>العربية — ترجمه کامل در دسترس نیست</option>
             </select>
+            <p className="text-xs text-gray-500 mt-2">رابط فعلی به فارسی نمایش داده می‌شود. ترجیح زبانی قبلی شما تا زمان تغییر و ذخیره حفظ می‌شود.</p>
             <Icons.ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 pointer-events-none" size={16} />
         </div>
 

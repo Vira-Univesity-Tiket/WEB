@@ -326,7 +326,13 @@ export const handleTopUpCallback = async (req, res) => {
     return res.status(401).json({ error: 'Forbidden' });
   }
 
-  const { transactionId, authority, gatewayStatus, refId, merged } = extractCallbackFields(req);
+  return processTopUpVerification(req, res, replyCallback, extractCallbackFields(req));
+};
+
+// Both callback delivery and owner-authorized status checks use this same locked
+// verification/credit transaction. A browser return alone never settles money.
+const processTopUpVerification = async (req, res, respond, fields) => {
+  const { transactionId, authority, gatewayStatus, merged } = fields;
   const connection = await db.getConnection();
   try {
     await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
@@ -353,36 +359,19 @@ export const handleTopUpCallback = async (req, res) => {
       await auditLog(connection, req, 'payment.duplicate_callback', 'payment_transaction', payment.id, {
         reason: 'already_success'
       });
-      return replyCallback(req, res, {
+      return await respond(req, res, {
         success: true,
         transactionId: String(payment.id),
         status: 'success',
+        referenceId: payment.reference_id || null,
         message: callbackResponseMessage('success'),
         idempotent: true
-      });
+      }, connection);
     }
 
-    if (payment.status !== 'pending') {
-      await connection.commit();
-      return replyCallback(req, res, {
-        success: true,
-        transactionId: String(payment.id),
-        status: toClientTopupStatus(payment.status),
-        message: callbackResponseMessage(toClientTopupStatus(payment.status), 'وضعیت پرداخت قبلاً نهایی شده است.'),
-        idempotent: true
-      });
-    }
-
-    if (gatewayStatus === 'NOK') {
-      await markPaymentState(connection, payment.id, 'cancelled', merged, refId || null, null);
-      await connection.commit();
-      await auditLog(connection, req, 'payment.verify.failed', 'payment_transaction', payment.id, { reason: 'gateway_status_nok' });
-      return replyCallback(req, res, {
-        success: false,
-        transactionId: String(payment.id),
-        status: 'cancelled',
-        message: callbackResponseMessage('cancelled')
-      });
+    if (!['pending', 'failed', 'cancelled', 'expired'].includes(payment.status)) {
+      await connection.rollback();
+      return res.status(409).json({ error: 'وضعیت تراکنش قابل بررسی نیست.' });
     }
 
     const verifyResult = await verifyZarinpalPayment({
@@ -391,18 +380,25 @@ export const handleTopUpCallback = async (req, res) => {
     });
 
     if (!verifyResult.success) {
-      await markPaymentState(connection, payment.id, 'failed', { callback: merged, verify: verifyResult.gatewayPayload }, refId || verifyResult.referenceId || null, verifyResult.gatewayTransactionId || null);
+      // A documented server nonpayment releases the UI; transport/unknown errors
+      // retain reconciliation. Even a failed/cancelled callback can later recover
+      // through positive verification, so a delayed paid result is not discarded.
+      const nextStatus = verifyResult.definitiveFailure
+        ? (gatewayStatus === 'NOK' ? 'cancelled' : 'failed')
+        : payment.status;
+      await markPaymentState(connection, payment.id, nextStatus, { callback: merged, verify: verifyResult.gatewayPayload });
       await connection.commit();
-      await auditLog(connection, req, 'payment.verify.failed', 'payment_transaction', payment.id, {
+      await auditLog(connection, req, nextStatus === 'pending' ? 'payment.verify.pending' : 'payment.verify.failed', 'payment_transaction', payment.id, {
+        status: nextStatus,
         code: verifyResult.code,
         message: verifyResult.message || null
       });
-      return replyCallback(req, res, {
-        success: false,
+      return await respond(req, res, {
+        success: nextStatus === 'pending',
         transactionId: String(payment.id),
-        status: 'failed',
-        message: callbackResponseMessage('failed')
-      });
+        status: nextStatus,
+        message: nextStatus === 'pending' ? 'نتیجه پرداخت هنوز قطعی نیست؛ وضعیت را دوباره بررسی کنید.' : callbackResponseMessage(nextStatus)
+      }, connection);
     }
 
     const [users] = await connection.query(
@@ -461,13 +457,13 @@ export const handleTopUpCallback = async (req, res) => {
       referenceId: referenceId || null
     });
 
-    return replyCallback(req, res, {
+    return await respond(req, res, {
       success: true,
       transactionId: String(payment.id),
       status: 'success',
       message: callbackResponseMessage('success'),
       referenceId: referenceId || null
-    });
+    }, connection);
   } catch (error) {
     await connection.rollback();
     logError('Topup callback failed:', error);
@@ -488,7 +484,7 @@ export const handleTopUpStatus = async (req, res) => {
 
   try {
     const [rows] = await db.query(
-      `SELECT pt.id, pt.status, pt.reference_id, pt.verified_at, pt.created_at, pt.updated_at
+      `SELECT pt.id, pt.status, pt.authority, pt.reference_id, pt.verified_at, pt.created_at, pt.updated_at
        FROM payment_transactions pt
        JOIN users u ON u.id = pt.user_id
        WHERE pt.id = ? AND u.student_id = ?
@@ -497,6 +493,15 @@ export const handleTopUpStatus = async (req, res) => {
     );
     if (!rows.length) return res.status(404).json({ error: 'Invalid ID' });
     const row = rows[0];
+    if (row.status === 'pending' && row.authority) {
+      return processTopUpVerification(req, res, async (_request, response, payload, connection) => {
+        const [[current]] = await connection.query('SELECT status, reference_id, verified_at, created_at, updated_at FROM payment_transactions WHERE id = ?', [row.id]);
+        return response.json({
+          ...payload, status: toClientTopupStatus(current.status), referenceId: current.reference_id || null,
+          verifiedAt: current.verified_at || null, createdAt: current.created_at, updatedAt: current.updated_at,
+        });
+      }, { transactionId: row.id, authority: row.authority, gatewayStatus: '', merged: { source: 'owner_status_recheck' } });
+    }
     res.json({
       transactionId: String(row.id),
       status: toClientTopupStatus(row.status),
@@ -512,47 +517,15 @@ export const handleTopUpStatus = async (req, res) => {
   }
 };
 
-export const handleSupportTicket = (req, res) => {
-  (async () => {
-    try {
-      const studentId = req.auth?.studentId;
-      const title = String(req.body?.title || 'درخواست پشتیبانی').slice(0, 80);
-      const message = String(req.body?.message || req.body?.description || 'ثبت درخواست پشتیبانی').slice(0, 4000);
-
-      if (!studentId) {
-        return res.json({ success: true, ticketId: `TKT-${Date.now()}`, message: 'SUPPORT_TICKET_CREATED' });
-      }
-
-      const [userRows] = await db.query('SELECT id, student_id FROM users WHERE student_id = ? LIMIT 1', [studentId]);
-      const user = userRows?.[0];
-      if (!user) {
-        return res.json({ success: true, ticketId: `TKT-${Date.now()}`, message: 'SUPPORT_TICKET_CREATED' });
-      }
-
-      const [ticketResult] = await db.query(
-        `INSERT INTO support_tickets (user_id, title, status, storage_path)
-         VALUES (?, ?, 'open', '')`,
-        [user.id, title]
-      );
-      const ticketId = ticketResult.insertId;
-      await db.query(
-        `INSERT INTO support_ticket_messages (ticket_id, sender_role, sender_id, message)
-         VALUES (?, 'user', ?, ?)`,
-        [ticketId, user.student_id, message]
-      );
-      await db.query(
-        `INSERT INTO support_ticket_status_history (ticket_id, from_status, to_status, actor_role, actor_id, note)
-         VALUES (?, NULL, 'open', 'user', ?, NULL)`,
-        [ticketId, user.student_id]
-      );
-
-      res.json({
-        success: true,
-        ticketId: `TKT-${ticketId}`,
-        message: 'SUPPORT_TICKET_CREATED'
-      });
-    } catch {
-      res.json({ success: true, ticketId: `TKT-${Date.now()}`, message: 'SUPPORT_TICKET_CREATED' });
-    }
-  })();
+// The legacy singular route uses the same validation, storage and atomic write
+// as the canonical route, while preserving its tracking-number response contract.
+export const handleSupportTicket = async (req, res) => {
+  const { handleCreateSupportTicket } = await import('./supportTicketController.js');
+  const response = {
+    status(code) { res.status(code); return this; },
+    json(payload) { return res.json(payload.success && payload.ticket
+      ? { ...payload, ticketId: `TKT-${payload.ticket.id}`, message: 'SUPPORT_TICKET_CREATED' }
+      : payload); }
+  };
+  return handleCreateSupportTicket(req, response);
 };

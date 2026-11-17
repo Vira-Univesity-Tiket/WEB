@@ -101,6 +101,9 @@ export const initDB = async () => {
     };
 
     // --- DRIVERS TABLE MIGRATION ---
+    if (!(await checkColumn('drivers', 'auth_version'))) {
+      await conn.query('ALTER TABLE drivers ADD COLUMN auth_version INT UNSIGNED NOT NULL DEFAULT 0');
+    }
     if (!(await checkColumn('drivers', 'username'))) {
       console.log('⚡ Migrating: Adding "username" to drivers table...');
       await conn.query('ALTER TABLE drivers ADD COLUMN username VARCHAR(50) NOT NULL UNIQUE AFTER name');
@@ -285,6 +288,7 @@ export const initDB = async () => {
         id INT NOT NULL AUTO_INCREMENT,
         username VARCHAR(50) NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
+        auth_version INT UNSIGNED NOT NULL DEFAULT 0,
         role ENUM('admin','analyst') NOT NULL DEFAULT 'analyst',
         status ENUM('active','inactive') NOT NULL DEFAULT 'active',
         created_by VARCHAR(50) DEFAULT NULL,
@@ -297,6 +301,14 @@ export const initDB = async () => {
         KEY idx_admin_accounts_role_status (role, status)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+    if (!(await checkColumn('admin_accounts', 'auth_version'))) {
+      await conn.query('ALTER TABLE admin_accounts ADD COLUMN auth_version INT UNSIGNED NOT NULL DEFAULT 0');
+    }
+    await conn.query(`CREATE TABLE IF NOT EXISTS revoked_auth_sessions (
+      jti CHAR(32) NOT NULL PRIMARY KEY,
+      expires_at BIGINT UNSIGNED NOT NULL,
+      KEY idx_revoked_auth_sessions_expiry (expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     const adminUsername = String(process.env.ADMIN_USERNAME || '').trim();
     const adminPassword = String(process.env.ADMIN_PASSWORD || '');
     const [existingAdminRows] = await conn.query(

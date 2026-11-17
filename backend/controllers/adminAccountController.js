@@ -69,32 +69,25 @@ export const handleUpdateAnalyst = async (req, res) => {
   const role = req.body.role === 'admin' ? 'admin' : 'analyst';
   if (!username) return res.status(400).json({ error: 'FIELDS_REQUIRED' });
 
-  try {
-    await db.query(
-      `UPDATE admin_accounts SET username = ?, role = ?, updated_by = ? WHERE id = ?`,
-      [username, role, req.auth?.username || req.auth?.sub || 'admin', id]
-    );
-    await auditLog(db, req, 'admin.account_update', 'admin_account', id, { username, role });
-    res.json({ success: true });
-  } catch (error) {
-    if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'DUPLICATE_DRIVER' });
-    logError('Update analyst failed:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
+  return mutateAccount(req, res, id, async (connection, target, accounts) => {
+    preserveActiveAdmin(accounts, target, role, target.status);
+    const changed = target.username !== username || target.role !== role;
+    await connection.query('UPDATE admin_accounts SET username = ?, role = ?, auth_version = auth_version + ?, updated_by = ? WHERE id = ?', [username, role, changed ? 1 : 0, req.auth.username, id]);
+    await auditLog(connection, req, 'admin.account_update', 'admin_account', id, { username, role });
+    return { success: true };
+  });
 };
 
 export const handleToggleAnalystStatus = async (req, res) => {
   const id = Number(req.params.id);
   if ((!Number.isSafeInteger(id) || id <= 0)) return res.status(400).json({ error: 'INVALID_ID' });
-  try {
-    await db.query(`UPDATE admin_accounts SET status = IF(status='active','inactive','active'), updated_by = ? WHERE id = ?`, [req.auth?.username || req.auth?.sub || 'admin', id]);
-    const [rows] = await db.query('SELECT status FROM admin_accounts WHERE id = ? LIMIT 1', [id]);
-    await auditLog(db, req, 'admin.account_toggle_status', 'admin_account', id, { newStatus: rows[0]?.status });
-    res.json({ success: true, newStatus: rows[0]?.status });
-  } catch (error) {
-    logError('Toggle analyst status failed:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
+  return mutateAccount(req, res, id, async (connection, target, accounts) => {
+    const newStatus = target.status === 'active' ? 'inactive' : 'active';
+    preserveActiveAdmin(accounts, target, target.role, newStatus);
+    await connection.query('UPDATE admin_accounts SET status = ?, auth_version = auth_version + 1, updated_by = ? WHERE id = ?', [newStatus, req.auth.username, id]);
+    await auditLog(connection, req, 'admin.account_toggle_status', 'admin_account', id, { newStatus });
+    return { success: true, newStatus };
+  });
 };
 
 export const handleResetAnalystPassword = async (req, res) => {
@@ -106,12 +99,47 @@ export const handleResetAnalystPassword = async (req, res) => {
   if (password.length < 6) return res.status(400).json({ error: 'FIELDS_REQUIRED' });
   try {
     const hashed = await hashPassword(password);
-    await db.query(`UPDATE admin_accounts SET password_hash = ?, updated_by = ? WHERE id = ?`, [hashed, req.auth?.username || req.auth?.sub || 'admin', id]);
-    await auditLog(db, req, 'admin.account_reset_password', 'admin_account', id);
-    res.json({ success: true });
+    return await mutateAccount(req, res, id, async (connection) => {
+      await connection.query('UPDATE admin_accounts SET password_hash = ?, auth_version = auth_version + 1, updated_by = ? WHERE id = ?', [hashed, req.auth.username, id]);
+      await auditLog(connection, req, 'admin.account_reset_password', 'admin_account', id);
+      return { success: true };
+    });
   } catch (error) {
     logError('Reset analyst password failed:', error);
     res.status(500).json({ error: 'Server error' });
+  }
+};
+
+const preserveActiveAdmin = (accounts, target, role, status) => {
+  if (target.role === 'admin' && target.status === 'active' && (role !== 'admin' || status !== 'active') && accounts.filter(account => account.role === 'admin' && account.status === 'active').length <= 1) {
+    throw Object.assign(new Error('حداقل یک مدیر فعال باید باقی بماند.'), { httpStatus: 409, code: 'LAST_ACTIVE_ADMIN' });
+  }
+};
+
+const mutateAccount = async (req, res, id, mutation) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    // One stable lock order serializes role/status changes, including concurrent
+    // transitions against the last two administrators. No account data is deleted.
+    const [accounts] = await connection.query('SELECT id, username, role, status, auth_version FROM admin_accounts ORDER BY id FOR UPDATE');
+    const actor = accounts.find(account => String(account.id) === req.auth.sub);
+    if (!actor || actor.role !== 'admin' || actor.status !== 'active' || actor.username !== req.auth.username || actor.auth_version !== (req.auth.authVersion ?? 0)) {
+      throw Object.assign(new Error('دسترسی حساب تغییر کرده است؛ دوباره وارد شوید.'), { httpStatus: 403 });
+    }
+    const target = accounts.find(account => account.id === id);
+    if (!target) throw Object.assign(new Error('User not found'), { httpStatus: 404 });
+    const result = await mutation(connection, target, accounts);
+    await connection.commit();
+    return res.json(result);
+  } catch (error) {
+    await connection.rollback();
+    if (error.httpStatus) return res.status(error.httpStatus).json({ error: error.message, ...(error.code ? { code: error.code } : {}) });
+    if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'DUPLICATE_DRIVER' });
+    logError('Administrative account mutation failed:', error);
+    return res.status(500).json({ error: 'Server error' });
+  } finally {
+    connection.release();
   }
 };
 

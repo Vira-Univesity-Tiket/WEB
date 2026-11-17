@@ -189,7 +189,10 @@ export function useDriverLogic() {
     dirtyScans.current = false;
     activeRequests.current = {};
     uncertainScans.current.clear();
-    clearDriverAuthToken();
+    const logoutGeneration = generation.current;
+    void clearDriverAuthToken().then(revoked => {
+      if (!revoked && generation.current === logoutGeneration) setAuthError("خروج محلی انجام شد؛ ابطال نشست سرور تأیید نشد.");
+    });
     localStorage.removeItem(DRIVER_STORAGE_KEY);
     setSession(null);
     setRestoring(false);

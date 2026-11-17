@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { nationalCodeFor } from "./studentFixtures";
 import {
   DOCUMENT_PNG,
+  DOCUMENT_PDF,
   DRIVER_TEST_PASSWORD,
   purchaseDriverTicket,
   seedDriverDesign,
@@ -99,7 +100,7 @@ test("invalid login, legal content, rejected membership repair and private docum
   await page.getByLabel("تصویر گواهینامه", { exact: true }).setInputFiles({
     name: "license.pdf",
     mimeType: "application/pdf",
-    buffer: Buffer.from("%PDF-1.4\n% isolated driver document fixture\n%%EOF"),
+    buffer: DOCUMENT_PDF,
   });
   await page.getByLabel("تصویر کارت خودرو", { exact: true }).setInputFiles({
     name: "car.png",

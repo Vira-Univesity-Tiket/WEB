@@ -219,9 +219,10 @@ export const useSnappLogic = () => {
   }, [isSuperAdminRoute, isDriverRoute, storedProfile]);
 
   useEffect(() => {
-    const lang = userProfile.language || "fa";
+    // Keep saved language preferences, but only advertise the complete UI locale.
+    const lang = "fa";
     document.documentElement.lang = lang;
-    document.documentElement.dir = lang === "en" ? "ltr" : "rtl";
+    document.documentElement.dir = "rtl";
     document.body.className = `lang-${lang}`;
   }, [userProfile.language]);
 
@@ -488,7 +489,10 @@ export const useSnappLogic = () => {
     localStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(ADMIN_STORAGE_KEY);
     sessionStorage.removeItem(ADMIN_AUTH_KEY);
-    clearAuthTokens();
+    const logoutGeneration = sessionGeneration.current;
+    void clearAuthTokens().then(revoked => {
+      if (!revoked && sessionGeneration.current === logoutGeneration) showToast("خروج محلی انجام شد؛ ابطال نشست سرور تأیید نشد.", "error");
+    });
 
     setUserProfile(DEFAULT_USER_PROFILE);
     setTickets([]);

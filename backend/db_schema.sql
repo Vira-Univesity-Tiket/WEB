@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS drivers (
   name VARCHAR(100) NOT NULL,
   username VARCHAR(50) NOT NULL,
   password VARCHAR(255) NOT NULL,
+  auth_version INT UNSIGNED NOT NULL DEFAULT 0,
   license_plate VARCHAR(30) NOT NULL,
   phone VARCHAR(20) DEFAULT NULL,
   status ENUM('active','inactive','pending','rejected') NOT NULL DEFAULT 'pending',
@@ -211,10 +212,17 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   KEY idx_audit_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS revoked_auth_sessions (
+  jti CHAR(32) NOT NULL PRIMARY KEY,
+  expires_at BIGINT UNSIGNED NOT NULL,
+  KEY idx_revoked_auth_sessions_expiry (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS admin_accounts (
   id INT NOT NULL AUTO_INCREMENT,
   username VARCHAR(50) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
+  auth_version INT UNSIGNED NOT NULL DEFAULT 0,
   role ENUM('admin','analyst') NOT NULL DEFAULT 'analyst',
   status ENUM('active','inactive') NOT NULL DEFAULT 'active',
   created_by VARCHAR(50) DEFAULT NULL,

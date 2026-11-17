@@ -24,7 +24,12 @@ export const handleGetUsers = async (req, res) => {
     const [rows] = await db.query(
       'SELECT * FROM users ORDER BY id DESC'
     );
-    res.json(rows.map(mapAdminUser));
+    res.json(rows.map((row) => {
+      const user = mapAdminUser(row);
+      // Analysts consume aggregate demographics, never student login identifiers.
+      if (req.auth.role === 'analyst') return { ...user, name: '', studentId: '', nationalCode: '', avatar: '' };
+      return user;
+    }));
   } catch (error) {
     logError('-> Get Users Error:', error);
     res.status(500).json({ error: 'Server error' });

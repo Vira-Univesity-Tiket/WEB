@@ -302,6 +302,7 @@ const WalletView: React.FC<WalletViewProps> = ({
                 setExpanded(expanded === transaction.id ? null : transaction.id)
               }
               aria-expanded={expanded === transaction.id}
+              aria-controls={`transaction-details-${transaction.id}`}
               aria-label={
                 "جزئیات تراکنش " + transaction.title.replace(/بلیط/g, "بلیت")
               }
@@ -335,7 +336,7 @@ const WalletView: React.FC<WalletViewProps> = ({
               </div>
             </button>
             {expanded === transaction.id && (
-              <div className="student-transaction-detail">
+              <div id={`transaction-details-${transaction.id}`} className="student-transaction-detail">
                 <div>
                   کد پیگیری
                   <br />

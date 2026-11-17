@@ -153,8 +153,20 @@ test('issue tickets, scan continuously without restarting the camera, reject inv
   await page.getByRole('tab', { name: /آرشیو/ }).click();
   await page.screenshot({ path: 'test-results/shared-flow-student-archive.png', fullPage: true });
   await page.getByRole('button', { name: 'ثبت نظر سفر', exact: true }).first().click();
+  await page.setViewportSize({ width: 568, height: 320 });
+  const feedback = page.getByRole('dialog', { name: 'سفر چطور بود؟' });
+  await expect.poll(async () => (await feedback.boundingBox())?.y ?? -1).toBeGreaterThanOrEqual(0);
+  await feedback.getByRole('button', { name: 'بستن نظر سفر' }).scrollIntoViewIfNeeded();
+  await expect(feedback.getByRole('button', { name: 'بستن نظر سفر' })).toBeInViewport();
+  await page.screenshot({ path: 'test-results/brm-rating-landscape.png', fullPage: true });
   await page.getByRole('button', { name: '5 از ۵ ستاره' }).click();
   await page.getByLabel('نظر سفر', { exact: true }).fill('آزمون محلی جریان سفر');
+  // A shorter visual viewport models the space left while a keyboard is open;
+  // real mobile keyboard/platform behavior still needs device verification.
+  await page.setViewportSize({ width: 390, height: 260 });
+  await expect.poll(async () => (await feedback.boundingBox())?.y ?? -1).toBeGreaterThanOrEqual(0);
+  await page.getByRole('button', { name: 'ثبت نظر', exact: true }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole('button', { name: 'ثبت نظر', exact: true })).toBeInViewport();
   await page.getByRole('button', { name: 'ثبت نظر', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'سفر چطور بود؟' })).not.toBeVisible();
   expect(errors).toEqual([]);

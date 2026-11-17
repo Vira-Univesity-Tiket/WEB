@@ -26,11 +26,25 @@ const saveToken = (key: string, token?: string) => {
   storage.setItem(key, token);
 };
 
-export const clearAuthTokens = () => {
-  if (typeof window === 'undefined') return;
+const revokeSession = async (token: string | null): Promise<boolean> => {
+  if (!token) return true;
+  try {
+    const response = await fetch(buildApiUrl('/auth/logout'), {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      keepalive: true, signal: AbortSignal.timeout(5000),
+    });
+    if (response.status === 401) return true;
+    return response.ok && (await response.json()).success === true;
+  } catch { return false; }
+};
+
+export const clearAuthTokens = (): Promise<boolean> => {
+  if (typeof window === 'undefined') return Promise.resolve(true);
+  const tokens = [localStorage.getItem(USER_TOKEN_KEY), localStorage.getItem(DRIVER_TOKEN_KEY), sessionStorage.getItem(ADMIN_TOKEN_KEY)];
   localStorage.removeItem(USER_TOKEN_KEY);
   localStorage.removeItem(DRIVER_TOKEN_KEY);
   sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+  return Promise.all(tokens.map(revokeSession)).then(results => results.every(Boolean));
 };
 
 export const hasDriverAuthToken = (): boolean => {
@@ -38,7 +52,11 @@ export const hasDriverAuthToken = (): boolean => {
   return Boolean(localStorage.getItem(DRIVER_TOKEN_KEY));
 };
 
-export const clearDriverAuthToken = () => localStorage.removeItem(DRIVER_TOKEN_KEY);
+export const clearDriverAuthToken = (): Promise<boolean> => {
+  const token = localStorage.getItem(DRIVER_TOKEN_KEY);
+  localStorage.removeItem(DRIVER_TOKEN_KEY);
+  return revokeSession(token);
+};
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) { super(message); this.name = 'ApiError'; }

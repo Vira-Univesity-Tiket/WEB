@@ -39,7 +39,7 @@ export const handleGetLegalContent = async (req, res) => {
 
 export const handleUpsertLegalContent = async (req, res) => {
   const audience = normalizeAudience(req.body?.audience);
-  const content = sanitizeText(req.body?.content, 60_000);
+  const content = sanitizeText(req.body?.content, 60_000, { multiline: true });
   if (!audience) return res.status(400).json({ error: 'audience نامعتبر است.' });
   if (!content) return res.status(400).json({ error: 'متن قوانین الزامی است.' });
 

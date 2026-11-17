@@ -129,7 +129,7 @@ export const handleUpdateProfile = async (req, res) => {
   if (province !== undefined) { updates.push('province = ?'); values.push(sanitizeText(province, 50)); }
   if (city !== undefined) { updates.push('city = ?'); values.push(sanitizeText(city, 50)); }
   if (avatar !== undefined) {
-    if (avatar !== '' && !parseUpload(avatar, { maxBytes: 512 * 1024, allowedMime: ['image/png', 'image/jpeg', 'image/webp'] }).ok) {
+    if (avatar !== '' && !(await parseUpload(avatar, { maxBytes: 512 * 1024, allowedMime: ['image/png', 'image/jpeg', 'image/webp'] })).ok) {
       return res.status(400).json({ error: 'تصویر پروفایل باید PNG، JPEG یا WebP و حداکثر ۵۱۲ کیلوبایت باشد.' });
     }
     updates.push('avatar = ?'); values.push(avatar);
@@ -169,7 +169,7 @@ export const handleAdminLogin = async (req, res) => {
     const normalizedUsername = sanitizeText(username, 50);
     const normalizedPassword = String(password);
     const [accounts] = await db.query(
-      `SELECT id, username, password_hash, role, status
+      `SELECT id, username, password_hash, auth_version, role, status
        FROM admin_accounts
        WHERE username = ?
        LIMIT 1`,
@@ -189,7 +189,8 @@ export const handleAdminLogin = async (req, res) => {
       const token = issueAuthToken({
         sub: String(account.id),
         role: account.role,
-        username: account.username
+        username: account.username,
+        authVersion: account.auth_version
       });
       req.auth = { role: account.role, sub: account.username };
       await auditLog(db, req, `${account.role}.login`, 'admin_account', account.id, { username: account.username });

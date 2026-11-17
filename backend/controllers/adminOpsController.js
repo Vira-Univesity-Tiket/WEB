@@ -17,7 +17,7 @@ const mapStation = (row) => ({
   isActive: Boolean(row.is_active)
 });
 
-const mapDriver = (row) => ({
+const mapDriver = (row, role) => ({
   id: row.id.toString(),
   name: row.name,
   username: row.username,
@@ -27,21 +27,21 @@ const mapDriver = (row) => ({
   capacity: Number(row.capacity || 30),
   assignedStations: row.assigned_station_ids ? row.assigned_station_ids.split(',').filter(Boolean) : [],
   plateData: safeParse(row.plate_data),
-  documents: safeParse(row.documents),
-  nationalCode: row.national_code || null,
+  documents: role === 'analyst' ? null : safeParse(row.documents),
+  nationalCode: role === 'analyst' ? null : row.national_code || null,
   updatedAt: row.updated_at || null,
   createdAt: row.created_at || null
 });
 
-const mapDriverRequest = (row) => ({
+const mapDriverRequest = (row, role) => ({
   id: row.id.toString(),
   name: row.name,
-  nationalCode: row.national_code,
-  birthDate: row.birth_date,
+  nationalCode: role === 'analyst' ? '' : row.national_code,
+  birthDate: role === 'analyst' ? '' : row.birth_date,
   phone: row.phone,
   licensePlate: row.license_plate,
   plateData: safeParse(row.plate_data), // JSON object safely parsed
-  documents: safeParse(row.documents),   // JSON object safely parsed
+  documents: role === 'analyst' ? null : safeParse(row.documents),
   username: row.username,
   status: row.status,
   createdAt: row.created_at
@@ -142,7 +142,7 @@ export const handleDeleteStation = async (req, res) => {
 };
 
 // --- DRIVERS ---
-export const handleGetDrivers = async (_req, res) => {
+export const handleGetDrivers = async (req, res) => {
   try {
     const [rows] = await db.query(
       `SELECT d.*,
@@ -153,7 +153,7 @@ export const handleGetDrivers = async (_req, res) => {
        GROUP BY d.id
        ORDER BY d.id DESC`
     );
-    res.json(rows.map(mapDriver));
+    res.json(rows.map(row => mapDriver(row, req.auth.role)));
   } catch (error) {
     logError('Get drivers failed', error);
     res.status(500).json({ error: 'Server error' });
@@ -205,7 +205,7 @@ export const handleGetDriverExportData = async (req, res) => {
             section: 'summary',
             name: driver.name,
             plate: driver.license_plate,
-            nationalCode: driver.national_code || '-',
+            nationalCode: req.auth.role === 'analyst' ? '' : driver.national_code || '-',
             stations: stations,
             totalTrips: totalTrips,
             totalRevenue: totalRevenueToman
@@ -312,6 +312,7 @@ export const handleUpdateDriver = async (req, res) => {
   const normalizedUsername = sanitizeText(username, 50);
   const normalizedLicensePlate = sanitizeText(licensePlate, 30);
   if (!normalizedName || normalizedUsername.length < 3 || !normalizedLicensePlate) return res.status(400).json({ error: 'نام، نام کاربری و پلاک معتبر الزامی است.' });
+  if (password && String(password).trim().length < 4) return res.status(400).json({ error: 'رمز عبور باید حداقل ۴ کاراکتر باشد.' });
   const hasStationPayload = Array.isArray(assignedStations);
   const stationIds = hasStationPayload ? assignedStations.map((item) => Number(item)).filter((item) => Number.isFinite(item)) : [];
 
@@ -320,8 +321,13 @@ export const handleUpdateDriver = async (req, res) => {
     try {
       await connection.beginTransaction();
 
-      const updates = ['name=?', 'username=?', 'license_plate=?', 'phone=?', 'capacity=?'];
-      const values = [normalizedName, normalizedUsername, normalizedLicensePlate, phoneValidation.value || '', capacityValidation.value];
+      const [[existingDriver]] = await connection.query('SELECT username FROM drivers WHERE id = ? FOR UPDATE', [driverId]);
+      if (!existingDriver) {
+        await connection.rollback();
+        return res.status(404).json({ error: 'Driver not found' });
+      }
+      const updates = ['auth_version=auth_version+?', 'name=?', 'username=?', 'license_plate=?', 'phone=?', 'capacity=?'];
+      const values = [password || existingDriver.username !== normalizedUsername ? 1 : 0, normalizedName, normalizedUsername, normalizedLicensePlate, phoneValidation.value || '', capacityValidation.value];
       if (password) {
         updates.push('password=?');
         values.push(await hashPassword(String(password).trim()));
@@ -354,8 +360,10 @@ export const handleUpdateDriver = async (req, res) => {
 
 export const handleToggleDriverStatus = async (req, res) => {
   const driverId = Number(req.params.driverId);
+  if (!Number.isSafeInteger(driverId) || driverId <= 0) return res.status(400).json({ error: 'Invalid ID' });
   try {
-    await db.query("UPDATE drivers SET status = IF(status='active', 'inactive', 'active') WHERE id=?", [driverId]);
+    const [result] = await db.query("UPDATE drivers SET auth_version = auth_version + 1, status = IF(status='active', 'inactive', 'active') WHERE id=?", [driverId]);
+    if (!result.affectedRows) return res.status(404).json({ error: 'Driver not found' });
     const [rows] = await db.query('SELECT status FROM drivers WHERE id=?', [driverId]);
     await auditLog(db, req, 'admin.driver_toggle_status', 'driver', driverId, { newStatus: rows[0]?.status });
     res.json({ success: true, newStatus: rows[0]?.status });
@@ -402,7 +410,7 @@ export const handleGetPendingDrivers = async (req, res) => {
     const [rows] = await db.query(
       "SELECT * FROM drivers WHERE status = 'pending' ORDER BY created_at ASC"
     );
-    res.json(rows.map(mapDriverRequest));
+    res.json(rows.map(row => mapDriverRequest(row, req.auth.role)));
   } catch (error) {
     logError('Get Pending Drivers Error', error);
     res.status(500).json({ error: 'Server error' });
@@ -416,7 +424,7 @@ export const handleGetDriverRequestHistory = async (req, res) => {
     const [rows] = await db.query(
       "SELECT * FROM drivers WHERE status IN ('rejected', 'active', 'inactive') ORDER BY created_at DESC"
     );
-    res.json(rows.map(mapDriverRequest));
+    res.json(rows.map(row => mapDriverRequest(row, req.auth.role)));
   } catch (error) {
     logError('Get Driver Request History Error', error);
     res.status(500).json({ error: 'Server error' });
@@ -426,7 +434,7 @@ export const handleGetDriverRequestHistory = async (req, res) => {
 export const handleApproveDriver = async (req, res) => {
   const driverId = Number(req.params.driverId);
   try {
-    await db.query("UPDATE drivers SET status = 'active', rejection_reason = NULL WHERE id = ?", [driverId]);
+    await db.query("UPDATE drivers SET auth_version = auth_version + IF(status <> 'active', 1, 0), status = 'active', rejection_reason = NULL WHERE id = ?", [driverId]);
     await auditLog(db, req, 'admin.driver_approve', 'driver', driverId);
     res.json({ success: true });
   } catch (error) {
@@ -441,7 +449,7 @@ export const handleRejectDriver = async (req, res) => {
   if (!reason) return res.status(400).json({ error: 'Rejection reason required' });
 
   try {
-    await db.query("UPDATE drivers SET status = 'rejected', rejection_reason = ? WHERE id = ?", [reason, driverId]);
+    await db.query("UPDATE drivers SET auth_version = auth_version + IF(status <> 'rejected', 1, 0), status = 'rejected', rejection_reason = ? WHERE id = ?", [reason, driverId]);
     await auditLog(db, req, 'admin.driver_reject', 'driver', driverId, { reason });
     res.json({ success: true });
   } catch (error) {

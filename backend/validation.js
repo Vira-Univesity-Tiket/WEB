@@ -5,14 +5,15 @@ export const normalizeDigits = (value) => String(value ?? '')
   .replace(/[۰-۹]/g, (digit) => String(persianDigits.indexOf(digit)))
   .replace(/[٠-٩]/g, (digit) => String(arabicDigits.indexOf(digit)));
 
-export const sanitizeText = (value, max = 255) => {
+export const sanitizeText = (value, max = 255, { multiline = false } = {}) => {
   if (typeof value !== 'string') return '';
-  return value.replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, max);
+  const text = value.replace(/\r\n?/g, '\n').replace(/\t/g, ' ');
+  return text.replace(multiline ? /[\u0000-\u0009\u000B-\u001F\u007F]/g : /[\u0000-\u001F\u007F]/g, '').trim().slice(0, max);
 };
 
-export const sanitizePlainText = (value, max = 5000) => {
+export const sanitizePlainText = (value, max = 5000, options = {}) => {
   if (typeof value !== 'string') return '';
-  const trimmed = value.replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  const trimmed = sanitizeText(value, max, options);
   // Store as plain text (helps prevent XSS if a consumer accidentally renders as HTML).
   return trimmed
     .replace(/[<>]/g, '')
@@ -141,7 +142,7 @@ export const validateIdeaTitle = (value) => {
 };
 
 export const validateIdeaDescription = (value) => {
-  const description = sanitizePlainText(value, 3000);
+  const description = sanitizePlainText(value, 3000, { multiline: true });
   if (!description) return { ok: false, value: description, error: 'IDEA_DESCRIPTION_REQUIRED' };
   if (description.length < 15) return { ok: false, value: description, error: 'IDEA_DESCRIPTION_MIN' };
   return { ok: true, value: description };

@@ -1,4 +1,36 @@
-export const parseUpload = (dataUrl, { maxBytes, allowedMime }) => {
+import { Worker } from 'node:worker_threads';
+
+let activeParsers = 0;
+const validateContent = (buffer, mime) => new Promise((resolve) => {
+  // Bound hostile parser work independently from the HTTP event loop.
+  if (activeParsers >= 2) return resolve(false);
+  activeParsers += 1;
+  let worker;
+  try {
+    worker = new Worker(new URL('./uploadParserWorker.js', import.meta.url), {
+      workerData: { buffer, mime },
+      resourceLimits: { maxOldGenerationSizeMb: 64, stackSizeMb: 4 },
+    });
+  } catch {
+    activeParsers -= 1;
+    return resolve(false);
+  }
+  let finished = false;
+  const finish = (valid) => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timer);
+    activeParsers -= 1;
+    void worker.terminate();
+    resolve(valid);
+  };
+  const timer = setTimeout(() => finish(false), 5000);
+  worker.once('message', valid => finish(valid === true));
+  worker.once('error', () => finish(false));
+  worker.once('exit', () => finish(false));
+});
+
+export const parseUpload = async (dataUrl, { maxBytes, allowedMime }) => {
   if (typeof dataUrl !== 'string' || dataUrl.length > Math.ceil(maxBytes / 3) * 4 + 100) return { ok: false, error: 'حجم فایل بیش از حد مجاز است.' };
   const match = /^data:([^;]+);base64,([A-Za-z0-9+/]*={0,2})$/.exec(dataUrl);
   if (!match || !allowedMime.includes(match[1]) || match[2].length % 4 !== 0) return { ok: false, error: 'فرمت فایل مجاز نیست.' };
@@ -13,5 +45,6 @@ export const parseUpload = (dataUrl, { maxBytes, allowedMime }) => {
     'text/plain': () => !buffer.includes(0) && Buffer.from(buffer.toString('utf8')).equals(buffer)
   };
   if (!signatures[mime]?.()) return { ok: false, error: 'محتوای فایل با فرمت آن مطابقت ندارد.' };
+  if (mime !== 'text/plain' && !(await validateContent(buffer, mime))) return { ok: false, error: 'فایل قابل خواندن نیست یا از محدودیت پردازش عبور می‌کند؛ فایل سالم را دوباره بارگذاری کنید.' };
   return { ok: true, mime, buffer };
 };

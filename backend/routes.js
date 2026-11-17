@@ -87,8 +87,8 @@ import {
   handleUpdateAnalyst
 } from './controllers/adminAccountController.js';
 import { handleGetLegalContent, handleUpsertLegalContent } from './controllers/legalController.js';
-import { authenticate as authenticateToken, createRateLimiter, enforceReadOnlyRole, optionalAuth, requireRole } from './security.js';
-import { requireActiveAccount } from './accountAccess.js';
+import { authenticate as authenticateToken, createRateLimiter, enforceReadOnlyRole, requireRole } from './security.js';
+import { requireActiveAccount, optionalActiveAccount, handleLogout } from './accountAccess.js';
 
 const router = express.Router();
 const authenticate = [authenticateToken, requireActiveAccount];
@@ -112,6 +112,7 @@ const paymentCallbackLimiter = createRateLimiter({
 // Auth
 router.post('/auth/login', authLimiter, handleLogin);
 router.post('/auth/register', authLimiter, handleRegister);
+router.post('/auth/logout', authenticateToken, writeLimiter, handleLogout);
 router.get('/auth/me', authenticate, requireRole('user'), handleCurrentUser);
 router.post('/auth/update-profile', authenticate, requireRole('user'), handleUpdateProfile);
 router.post('/admin/login', authLimiter, handleAdminLogin);
@@ -123,7 +124,7 @@ router.get('/health', handleHealth);
 router.post('/bus/schedule', handleGetBusSchedule);
 router.get('/stations', handleGetStations);
 router.post('/support/chat', handleChat);
-router.get('/notifications/active', optionalAuth, handleGetActiveNotification); // Public notification (role-aware)
+router.get('/notifications/active', optionalActiveAccount, handleGetActiveNotification); // Public notification (role-aware)
 router.get('/legal', handleGetLegalContent);
 router.get('/notifications/inbox', authenticate, requireRole('user'), handleGetMyNotifications);
 router.put('/notifications/inbox/:id/read', authenticate, requireRole('user'), writeLimiter, handleMarkNotificationRead);
@@ -141,7 +142,7 @@ router.post('/wallet/topup/callback', paymentCallbackLimiter, handleTopUpCallbac
 router.post('/wallet/topup/initiate', authenticate, requireRole('user'), paymentInitLimiter, handleTopUpInitiate);
 router.get('/wallet/topup/status/:transactionId', authenticate, requireRole('user'), financeLimiter, handleTopUpStatus);
 router.post('/wallet/topup', authenticate, requireRole('user'), financeLimiter, handleTopUpDeprecated);
-router.post('/support/ticket', authenticate, handleSupportTicket);
+router.post('/support/ticket', authenticate, requireRole('user'), writeLimiter, handleSupportTicket);
 router.post('/support/tickets', authenticate, requireRole('user'), writeLimiter, handleCreateSupportTicket);
 router.get('/support/tickets', authenticate, requireRole('user'), handleListSupportTickets);
 router.get('/support/tickets/:ticketId', authenticate, requireRole('user', 'admin'), handleGetSupportTicket);

@@ -13,15 +13,30 @@ const RatingSheet: React.FC<RatingSheetProps> = ({ isOpen, onClose, onSubmit }) 
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [viewport, setViewport] = useState<{ height: number; top: number }>();
   const dialog = useDialogFocus(isOpen, onClose);
   useEffect(() => { if (isOpen) { setRating(0); setComment(''); } }, [isOpen]);
+  useEffect(() => {
+    if (!isOpen) return;
+    const visual = window.visualViewport;
+    const update = () => setViewport({ height: visual?.height ?? window.innerHeight, top: visual?.offsetTop ?? 0 });
+    update();
+    visual?.addEventListener('resize', update);
+    visual?.addEventListener('scroll', update);
+    window.addEventListener('resize', update);
+    return () => {
+      visual?.removeEventListener('resize', update);
+      visual?.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center">
+    <div style={viewport ? { top: viewport.top, height: viewport.height, bottom: 'auto' } : undefined} className="fixed inset-0 z-[60] flex items-end justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}></div>
-      <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="rating-title" tabIndex={-1} className="w-full max-w-md bg-white dark:bg-slate-900 rounded-t-3xl p-6 relative z-10 animate-in slide-in-from-bottom duration-300 shadow-2xl">
+      <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="rating-title" tabIndex={-1} style={viewport ? { maxHeight: Math.max(0, viewport.height - 16) } : undefined} className="rating-sheet w-full max-w-md bg-white dark:bg-slate-900 rounded-t-3xl p-6 relative z-10 animate-in slide-in-from-bottom duration-300 shadow-2xl">
         <button type="button" aria-label="بستن نظر سفر" onClick={onClose} className="absolute top-3 left-3 p-2 rounded-full bg-gray-100 dark:bg-slate-800"><Icons.X size={18} /></button>
         <div className="w-12 h-1.5 bg-gray-200 dark:bg-slate-700 rounded-full mx-auto mb-6"></div>
         

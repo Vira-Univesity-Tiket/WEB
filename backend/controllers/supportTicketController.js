@@ -169,7 +169,7 @@ export const handleCreateSupportTicket = async (req, res) => {
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   const title = sanitizeText(req.body?.title, 80);
-  const message = sanitizeText(req.body?.message || req.body?.description, 4000);
+  const message = sanitizeText(req.body?.message || req.body?.description, 4000, { multiline: true });
   const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
 
   if (!title || !message) return res.status(400).json({ error: 'تکمیل عنوان و توضیحات الزامی است.' });
@@ -178,7 +178,7 @@ export const handleCreateSupportTicket = async (req, res) => {
   const parsedAttachments = [];
   let attachmentBytes = 0;
   for (const file of attachments) {
-    const parsed = parseDataUrl(file?.dataUrl);
+    const parsed = await parseDataUrl(file?.dataUrl);
     if (!parsed.ok) return res.status(400).json({ error: parsed.error });
     attachmentBytes += parsed.buffer.length;
     if (attachmentBytes > 8 * 1024 * 1024) return res.status(400).json({ error: 'مجموع ضمیمه‌های هر پیام باید حداکثر ۸ مگابایت باشد.' });
@@ -359,7 +359,7 @@ export const handleAddSupportTicketMessage = async (req, res) => {
   const studentId = req.auth?.studentId;
   const adminId = req.auth?.sub ? String(req.auth.sub) : null;
 
-  const text = sanitizeText(req.body?.message, 4000);
+  const text = sanitizeText(req.body?.message, 4000, { multiline: true });
   const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
   if (!text) return res.status(400).json({ error: 'متن پیام الزامی است.' });
   if (attachments.length > MAX_FILES_PER_MESSAGE) return res.status(400).json({ error: 'تعداد فایل‌های ضمیمه بیش از حد مجاز است.' });
@@ -380,7 +380,7 @@ export const handleAddSupportTicketMessage = async (req, res) => {
   const parsedAttachments = [];
   let attachmentBytes = 0;
   for (const file of attachments) {
-    const parsed = parseDataUrl(file?.dataUrl);
+    const parsed = await parseDataUrl(file?.dataUrl);
     if (!parsed.ok) return res.status(400).json({ error: parsed.error });
     attachmentBytes += parsed.buffer.length;
     if (attachmentBytes > 8 * 1024 * 1024) return res.status(400).json({ error: 'مجموع ضمیمه‌های هر پیام باید حداکثر ۸ مگابایت باشد.' });

@@ -162,15 +162,27 @@ export const verifyZarinpalPayment = async ({ amountRial, authority }) => {
       authority
     };
 
-  const result = await postJson(config.verifyUrl, payload);
-  const code = Number(result.body?.data?.code ?? result.body?.Status ?? result.body?.status);
+  let result;
+  try {
+    result = await postJson(config.verifyUrl, payload);
+  } catch {
+    // A timeout/transport failure cannot establish whether money was received.
+    return { success: false, code: null, gatewayPayload: { verificationUnavailable: true } };
+  }
+  const rawCode = result.body?.data?.code ?? result.body?.errors?.code ?? result.body?.Status ?? result.body?.status;
+  const code = rawCode === undefined ? null : Number(rawCode);
   const refId = String(result.body?.data?.ref_id || result.body?.RefID || result.body?.ref_id || '').trim();
   const message = String(result.body?.data?.message || result.body?.errors?.message || result.body?.message || '');
   const gatewayTransactionId = String(result.body?.data?.transaction_id || refId || '').trim();
   const success = result.ok && (code === 100 || code === 101) && Boolean(refId);
+  // ZarinPal documents -51 as unsuccessful payment. Infrastructure, merchant,
+  // amount-mismatch and unknown errors do not establish nonpayment.
+  // https://www.zarinpal.com/docs/paymentGateway/errorList.html
+  const definitiveFailure = result.status < 500 && result.status !== 429 && code === -51;
 
   return {
     success,
+    definitiveFailure,
     code,
     referenceId: refId,
     gatewayTransactionId,
